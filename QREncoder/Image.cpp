@@ -5,15 +5,7 @@
 #include <map>
 #include <bitset>
 
-namespace
-{
-	short operator "" _short(std::uint64_t value)
-	{
-		return static_cast<short>(value);
-	}
-}
-
-bool operator<(const RGBQUAD &lhs, const RGBQUAD &rhs)
+bool operator<(RGBQUAD lhs, RGBQUAD rhs)
 {
 	return lhs.rgbBlue < rhs.rgbBlue
 		|| lhs.rgbBlue == rhs.rgbBlue && lhs.rgbGreen < rhs.rgbGreen
@@ -60,14 +52,12 @@ BMPImage::BMPImage(std::uint16_t width, std::uint16_t height, std::uint8_t bitsP
 			throw std::invalid_argument("Invalid bit count. Valid values are 1, 4, 8, 16, 24 and 32");
 	}
 
-	mImpl->mInfoHeader.biBitCount = bitsPerPixel;
 	mImpl->mInfoHeader.biSize = sizeof(decltype(mImpl->mInfoHeader));
 	mImpl->mInfoHeader.biWidth = width;
 	mImpl->mInfoHeader.biHeight -= height; //top-down bitmap
 	mImpl->mInfoHeader.biPlanes = 1;
 	mImpl->mInfoHeader.biBitCount = bitsPerPixel;
 	mImpl->mInfoHeader.biCompression = BI_RGB;
-	mImpl->mInfoHeader.biSizeImage = 0;
 }
 
 BMPImage::~BMPImage() = default;
@@ -88,7 +78,7 @@ void BMPImage::setPixelColor(Point point, Color color)
 
 				if (index == mImpl->mColorMap.end())
 				{
-					if (mImpl->mColorTable.size() < 1u << mImpl->mInfoHeader.biBitCount)
+					if (mImpl->mColorTable.size() < 1ull << mImpl->mInfoHeader.biBitCount)
 					{
 						mImpl->mColorTable.push_back({ color.mBlue, color.mGreen, color.mRed });
 						index = mImpl->mColorMap.emplace(mImpl->mColorTable.back(), mImpl->mColorTable.size() - 1).first;
@@ -98,8 +88,8 @@ void BMPImage::setPixelColor(Point point, Color color)
 				}
 				std::bitset<8> newByte = mImpl->mBitmap.at(pos / 8);
 
-				for (int i = 0; i < mImpl->mInfoHeader.biBitCount; ++i)
-					newByte.set(7 - pos % 8 - (mImpl->mInfoHeader.biBitCount - 1) + i, index->second & 1 << i);
+				for (size_t i = 0; i < mImpl->mInfoHeader.biBitCount; ++i)
+					newByte.set(7 - pos % 8 - (mImpl->mInfoHeader.biBitCount - 1) + i, index->second & 1ull << i);
 
 				mImpl->mBitmap.at(pos / 8) = static_cast<decltype(mImpl->mBitmap)::value_type>(newByte.to_ulong());
 				break;
@@ -147,6 +137,7 @@ Color BMPImage::getPixelColor(Point point)
 				result.mRed = mImpl->mColorTable[index].rgbRed;
 				result.mGreen = mImpl->mColorTable[index].rgbGreen;
 				result.mBlue = mImpl->mColorTable[index].rgbBlue;
+
 				break;
 			}
 
@@ -185,7 +176,7 @@ Color BMPImage::getPixelColor(Point point)
 
 Dimensions BMPImage::getDimensions()
 {
-	return { mImpl->mInfoHeader.biWidth, mImpl->mInfoHeader.biHeight };
+	return { static_cast<decltype(Dimensions::mWidth)>(mImpl->mInfoHeader.biWidth), static_cast<decltype(Dimensions::mWidth)>(mImpl->mInfoHeader.biHeight) };
 }
 
 std::ofstream& operator<<(std::ofstream &stream, const BMPImage &image)
@@ -199,7 +190,7 @@ std::ofstream& operator<<(std::ofstream &stream, const BMPImage &image)
 	if (image.mImpl->mInfoHeader.biBitCount == 1 || image.mImpl->mInfoHeader.biBitCount == 4 || image.mImpl->mInfoHeader.biBitCount == 8)
 	{
 		colorTable = image.mImpl->mColorTable;
-		colorTable.resize(1 << image.mImpl->mInfoHeader.biBitCount, { 0, 0, 0 });
+		colorTable.resize(1ull << image.mImpl->mInfoHeader.biBitCount, { 0, 0, 0 });
 	}
 
 	imageHeader.bfType = MAKEWORD('B', 'M');

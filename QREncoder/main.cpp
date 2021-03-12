@@ -11,24 +11,24 @@ int main()
 	if (output.is_open())
 	{
 		short width = 128, height = 128;
-		BMPImage image(width, height, 32);
+		BMPImage image(width, height, 1);
 
-		for (std::uint16_t y = 0; y < height; ++y)
+		for (std::uint16_t i = 0; i < height; ++i)
 		{
-			for (std::uint16_t x = 0; x < width; ++x)
+			for (std::uint16_t j = 0; j < width; ++j)
 			{
 				Color color;
-				std::uint16_t xModulo = x % 2, yModulo = y % 2;
+				std::uint16_t xModulo = j % 2, yModulo = i % 2;
 
-				if ((xModulo || yModulo) && !(xModulo && yModulo))
-					color = { 255, 255, 255};
-				else
+				if (/*(xModulo || yModulo) && !(xModulo && yModulo)*/!((i * j) % 2 + (i * j) % 3))
 					color = { 0, 0, 0 };
+				else
+					color = { 255, 255, 255 };
 
-				image.setPixelColor({ x, y }, color);
+				image.setPixelColor({ j, i }, color);
 			}
 
-			image.setPixelColor({ y, y }, { 0, 0, 128 });
+			//image.setPixelColor({ i, i }, { 0, 0, 128 });
 		}
 
 		auto color = image.getPixelColor({ 0, 0 });
