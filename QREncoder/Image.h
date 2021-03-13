@@ -31,6 +31,8 @@ class BMPImage
 public:
 	//BMPImage(std::string_view fileName);
 	BMPImage(std::uint16_t width, std::uint16_t height, std::uint8_t bitsPerPixel = 32);
+	BMPImage(const BMPImage&);
+	BMPImage(BMPImage&&);
 	~BMPImage();
 	void setPixelColor(Point point, Color color);
 	Color getPixelColor(Point point);

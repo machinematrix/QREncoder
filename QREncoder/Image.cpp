@@ -60,6 +60,12 @@ BMPImage::BMPImage(std::uint16_t width, std::uint16_t height, std::uint8_t bitsP
 	mImpl->mInfoHeader.biCompression = BI_RGB;
 }
 
+BMPImage::BMPImage(const BMPImage &other)
+	:mImpl(new Impl(*other.mImpl))
+{}
+
+BMPImage::BMPImage(BMPImage&&) = default;
+
 BMPImage::~BMPImage() = default;
 
 void BMPImage::setPixelColor(Point point, Color color)
