@@ -17,7 +17,7 @@ struct BMPImage::Impl //https://docs.microsoft.com/en-us/windows/win32/gdi/bitma
 	BITMAPINFOHEADER mInfoHeader = {};
 	std::vector<RGBQUAD> mColorTable;
 	std::map<RGBQUAD, decltype(mColorTable)::size_type> mColorMap;
-	std::vector<std::uint8_t> mBitmap;
+	std::vector<std::vector<std::uint8_t>> mBitmap;
 };
 
 //BMPImage::BMPImage(std::string_view fileName)
@@ -39,14 +39,28 @@ BMPImage::BMPImage(std::uint16_t width, std::uint16_t height, std::uint8_t bitsP
 		case 1:
 		case 4:
 		case 8:
-			mImpl->mBitmap.resize(width * height / (8 / bitsPerPixel) + width * height % (8 / bitsPerPixel));
+		{
+			size_t rowWidth = width / (8 / bitsPerPixel) + (width % (8 / bitsPerPixel) ? 1 : 0);
+
+			if (rowWidth % 4)
+				rowWidth = rowWidth - rowWidth % 4 + 4;
+
+			mImpl->mBitmap.resize(height, std::vector<std::uint8_t>(rowWidth));
 			break;
+		}
 
 		case 16:
 		case 24:
 		case 32:
-			mImpl->mBitmap.resize(width * height * (bitsPerPixel / 8));
+		{
+			size_t rowWidth = ((((width * bitsPerPixel) + 31) & ~31) >> 3)/*width * (bitsPerPixel / 8)*/;
+
+			if (rowWidth % 4)
+				rowWidth = rowWidth - rowWidth % 4 + 4;
+
+			mImpl->mBitmap.resize(height, std::vector<std::uint8_t>(rowWidth));
 			break;
+		}
 
 		default:
 			throw std::invalid_argument("Invalid bit count. Valid values are 1, 4, 8, 16, 24 and 32");
@@ -70,10 +84,10 @@ BMPImage::~BMPImage() = default;
 
 void BMPImage::setPixelColor(Point point, Color color)
 {
-	decltype(mImpl->mBitmap)::size_type pos = (point.mY * mImpl->mInfoHeader.biWidth + point.mX) * mImpl->mInfoHeader.biBitCount;
-
 	try
 	{
+		decltype(mImpl->mBitmap)::size_type column = point.mX * mImpl->mInfoHeader.biBitCount;
+
 		switch (mImpl->mInfoHeader.biBitCount)
 		{
 			case 1:
@@ -92,25 +106,25 @@ void BMPImage::setPixelColor(Point point, Color color)
 					else
 						throw std::runtime_error("Color table is full");
 				}
-				std::bitset<8> newByte = mImpl->mBitmap.at(pos / 8);
+				std::bitset<8> newByte = mImpl->mBitmap.at(point.mY).at(column / 8);
 
 				for (size_t i = 0; i < mImpl->mInfoHeader.biBitCount; ++i)
-					newByte.set(7 - pos % 8 - (mImpl->mInfoHeader.biBitCount - 1) + i, index->second & 1ull << i);
+					newByte.set(7 - column % 8 - (mImpl->mInfoHeader.biBitCount - 1) + i, index->second & 1ull << i);
 
-				mImpl->mBitmap.at(pos / 8) = static_cast<decltype(mImpl->mBitmap)::value_type>(newByte.to_ulong());
+				mImpl->mBitmap.at(point.mY).at(column / 8) = static_cast<decltype(mImpl->mBitmap)::value_type::value_type>(newByte.to_ulong());
 				break;
 			}
 
 			case 16:
-				mImpl->mBitmap.at(pos / 8) = color.mBlue >> 3 | color.mGreen >> 3 << 5;
-				mImpl->mBitmap.at(pos / 8 + 1) = color.mGreen >> 6 | color.mRed >> 3 << 2;
+				mImpl->mBitmap.at(point.mY).at(column / 8) = color.mBlue >> 3 | color.mGreen >> 3 << 5;
+				mImpl->mBitmap.at(point.mY).at(column / 8 + 1) = color.mGreen >> 6 | color.mRed >> 3 << 2;
 				break;
 
 			case 24:
 			case 32:
-				mImpl->mBitmap.at(pos / 8) = color.mBlue;
-				mImpl->mBitmap.at(pos / 8 + 1) = color.mGreen;
-				mImpl->mBitmap.at(pos / 8 + 2) = color.mRed;
+				mImpl->mBitmap.at(point.mY).at(column / 8) = color.mBlue;
+				mImpl->mBitmap.at(point.mY).at(column / 8 + 1) = color.mGreen;
+				mImpl->mBitmap.at(point.mY).at(column / 8 + 2) = color.mRed;
 				break;
 		}
 	}
@@ -123,22 +137,23 @@ void BMPImage::setPixelColor(Point point, Color color)
 
 Color BMPImage::getPixelColor(Point point)
 {
-	decltype(mImpl->mBitmap)::size_type pos = (point.mY * mImpl->mInfoHeader.biWidth + point.mX) * mImpl->mInfoHeader.biBitCount;
 	Color result = {};
 
 	try
 	{
+		decltype(mImpl->mBitmap)::size_type column = point.mX * mImpl->mInfoHeader.biBitCount;
+
 		switch (mImpl->mInfoHeader.biBitCount)
 		{
 			case 1:
 			case 4:
 			case 8:
 			{
-				std::bitset<8> byte = mImpl->mBitmap.at(pos / 8);
+				std::bitset<8> byte = mImpl->mBitmap.at(point.mY).at(column / 8);
 				decltype(mImpl->mColorTable)::size_type index = 0;
 
 				for (int i = 0; i < mImpl->mInfoHeader.biBitCount; ++i)
-					index |= byte.test(7 - pos % 8 - (mImpl->mInfoHeader.biBitCount - 1) + i) << i;
+					index |= byte.test(7 - column % 8 - (mImpl->mInfoHeader.biBitCount - 1) + i) << i;
 
 				result.mRed = mImpl->mColorTable[index].rgbRed;
 				result.mGreen = mImpl->mColorTable[index].rgbGreen;
@@ -148,9 +163,9 @@ Color BMPImage::getPixelColor(Point point)
 			}
 
 			case 16:
-				result.mBlue = (mImpl->mBitmap.at(pos / 8) & 0b11111) * 8; //lower 5 bits of the lower byte
-				result.mGreen = (mImpl->mBitmap.at(pos / 8) >> 5 | mImpl->mBitmap.at(pos / 8 + 1) & 0b11 << 3) * 8; //higher 3 bits of the lower byte OR lower 2 bits of the higher byte
-				result.mRed = (mImpl->mBitmap.at(pos / 8 + 1) << 1 >> 3) * 8; //5 bits starting from the second most significant bit of the higher byte
+				result.mBlue = (mImpl->mBitmap.at(point.mY).at(column / 8) & 0b11111) * 8; //lower 5 bits of the lower byte
+				result.mGreen = (mImpl->mBitmap.at(point.mY).at(column / 8) >> 5 | mImpl->mBitmap.at(point.mY).at(column / 8) & 0b11 << 3) * 8; //higher 3 bits of the lower byte OR lower 2 bits of the higher byte
+				result.mRed = (mImpl->mBitmap.at(point.mY).at(column / 8) << 1 >> 3) * 8; //5 bits starting from the second most significant bit of the higher byte
 
 				if (result.mRed == 248)
 					result.mRed = 255;
@@ -165,9 +180,9 @@ Color BMPImage::getPixelColor(Point point)
 
 			case 24:
 			case 32:
-				result.mBlue = mImpl->mBitmap.at(pos / 8);
-				result.mGreen = mImpl->mBitmap.at(pos / 8 + 1);
-				result.mRed = mImpl->mBitmap.at(pos / 8 + 2);
+				result.mBlue = mImpl->mBitmap.at(point.mY).at(column / 8);
+				result.mGreen = mImpl->mBitmap.at(point.mY).at(column / 8);
+				result.mRed = mImpl->mBitmap.at(point.mY).at(column / 8);
 				break;
 		}
 	}
@@ -201,12 +216,13 @@ std::ofstream& operator<<(std::ofstream &stream, const BMPImage &image)
 
 	imageHeader.bfType = MAKEWORD('B', 'M');
 	imageHeader.bfOffBits = sizeof(BITMAPFILEHEADER) + sizeof(BITMAPINFOHEADER) + colorTable.size() * sizeof(decltype(colorTable)::value_type);
-	imageHeader.bfSize = imageHeader.bfOffBits + image.mImpl->mBitmap.size() * sizeof(decltype(image.mImpl->mBitmap)::value_type);
+	//imageHeader.bfSize = imageHeader.bfOffBits + image.mImpl->mBitmap.size() * image.mImpl->mBitmap.at(0).size() * sizeof(decltype(image.mImpl->mBitmap)::value_type::value_type);
 
 	stream.write(reinterpret_cast<const char*>(&imageHeader), sizeof(imageHeader));
 	stream.write(reinterpret_cast<const char*>(&image.mImpl->mInfoHeader), sizeof(image.mImpl->mInfoHeader));
 	stream.write(reinterpret_cast<const char*>(colorTable.data()), static_cast<std::uint64_t>(colorTable.size()) * sizeof(decltype(colorTable)::value_type));
-	stream.write(reinterpret_cast<const char*>(image.mImpl->mBitmap.data()), static_cast<std::uint64_t>(image.mImpl->mBitmap.size()) * sizeof(decltype(image.mImpl->mBitmap)::value_type));
+	for (auto &row : image.mImpl->mBitmap)
+		stream.write(reinterpret_cast<const char *>(row.data()), static_cast<std::uint64_t>(row.size()) * sizeof(decltype(image.mImpl->mBitmap)::value_type::value_type));
 	
 	return stream;
 }
