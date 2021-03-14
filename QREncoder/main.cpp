@@ -25,7 +25,6 @@ BMPImage QRToBMP(const std::vector<std::vector<bool>> &code, unsigned multiplier
 							result.setPixelColor(point, { 255, 255, 255 });
 					}
 
-
 	return result;
 }
 
@@ -61,7 +60,7 @@ int main()
 		//auto color = image.getPixelColor({ 0, 0 });
 		//auto color2 = image.getPixelColor({ 1, 0 });
 		//auto color3 = image.getPixelColor({ 2, 0 });
-		BMPImage image = QRToBMP(QR::Encode("asd", QR::Mode::ALPHANUMERIC, QR::SymbolType::NORMAL, 1), 1);
+		BMPImage image = QRToBMP(QR::Encode("asd", QR::SymbolType::NORMAL, 7_L), 4);
 
 		output << image;
 	}

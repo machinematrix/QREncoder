@@ -5,7 +5,7 @@
 namespace QR
 {
 	using Symbol = std::vector<std::vector<bool>>;
-
+	
 	namespace
 	{
 		constexpr unsigned GetSymbolSize(SymbolType type, std::uint8_t version)
@@ -32,7 +32,7 @@ namespace QR
 
 		const std::vector<Symbol::size_type>& GetAlignmentPatternCenters(std::uint8_t version)
 		{
-			static const std::vector<std::vector<Symbol::size_type>> centers = {
+			static const std::array<std::vector<Symbol::size_type>, 40> centers = { {
 				{},
 				{ 6, 18 },
 				{ 6, 22 },
@@ -73,7 +73,7 @@ namespace QR
 				{ 6, 32, 58, 84, 110, 136, 162 },
 				{ 6, 26, 54, 82, 110, 138, 166 },
 				{ 6, 30, 58, 86, 114, 142, 170 }
-			};
+			} };
 
 			return centers.at(version - 1);
 		}
@@ -153,21 +153,92 @@ namespace QR
 							}
 				}
 		}
+
+		std::vector<std::vector<bool>> GetDataRegionMask(SymbolType type, std::uint8_t version)
+		{
+			using std::vector;
+			using std::pair;
+			using SizeType = Symbol::size_type;
+			struct Rectangle
+			{
+				struct Point
+				{
+					Symbol::size_type mX;
+					Symbol::size_type mY;
+				};
+				Point mFrom;
+				Point mTo;
+			};
+			auto symbolSize = GetSymbolSize(type, version);
+			vector<vector<bool>> result(symbolSize, vector<bool>(symbolSize));
+			auto &centers = GetAlignmentPatternCenters(version);
+			vector<Rectangle> functionPatterns;
+			SizeType timingRowColumn = type == SymbolType::MICRO ? 0 : 6;
+			
+			//Top left finder pattern
+			functionPatterns.push_back({ { 0, 0 }, { 7, 7 } });
+
+			//Timing patterns
+			functionPatterns.push_back({ { timingRowColumn, 0 }, { timingRowColumn, symbolSize - 1 } });
+			functionPatterns.push_back({ { 0, timingRowColumn }, { symbolSize - 1, timingRowColumn } });
+
+			//Top left format information
+			functionPatterns.push_back({ { 8, 0 }, { 8, 8 } });
+			functionPatterns.push_back({ { 0, 8 }, { 8, 8 } });
+
+			if (type != SymbolType::MICRO)
+			{
+				//Top right and bottom left finder patterns
+				functionPatterns.push_back({ { 0, symbolSize - 8 }, { 7, symbolSize - 1 } });
+				functionPatterns.push_back({ { symbolSize - 8, 0 }, { symbolSize - 1, 7 } });
+
+				//Bottom left and top right format infomation
+				functionPatterns.push_back({ { 8, symbolSize - 8 }, { 8, symbolSize - 1 } });
+				functionPatterns.push_back({ { symbolSize - 8, 8 }, { symbolSize - 1, 8 } });
+
+				//Alignment patterns
+				for (unsigned i = 0; i < centers.size(); ++i)
+					for (unsigned j = i; j < centers.size(); ++j)
+					{
+						auto centerX = centers[j], centerY = centers[i];
+
+						if (!(centerY == 6 && centerX == symbolSize - 7 || centerY == symbolSize - 7 && centerX == 6 || centerY == 6 && centerX == 6))
+						{
+							functionPatterns.push_back({ { centerX - 2, centerY - 2 }, { centerX + 2, centerY + 2 } });
+							functionPatterns.push_back({ { centerY - 2, centerX - 2 }, { centerY + 2, centerX + 2 } });
+						}
+					}
+
+				if (version >= 7)
+				{
+					functionPatterns.push_back({ { 0, symbolSize - 11 }, { 5, symbolSize - 9 } });
+					functionPatterns.push_back({ { symbolSize - 11, 0 }, { symbolSize - 9, 5 } });
+				}
+			}
+
+			for (const auto &rectangle : functionPatterns)
+				for (unsigned x = rectangle.mFrom.mX; x <= rectangle.mTo.mX; ++x)
+					for (unsigned y = rectangle.mFrom.mY; y <= rectangle.mTo.mY; ++y)
+						result[y][x] = true;
+
+			return result;
+		}
 	}
 
-	std::vector<std::vector<bool>> QR::Encode(std::string_view message, Mode mode, SymbolType type, std::uint8_t version)
+	std::vector<std::vector<bool>> QR::Encode(std::string_view message, SymbolType type, Version version)
 	{
-		std::vector<std::vector<bool>> result(GetSymbolSize(type, version), std::vector<bool>(GetSymbolSize(type, version)));
+		std::vector<std::vector<bool>> result(GetSymbolSize(type, version.mVersion), std::vector<bool>(GetSymbolSize(type, version.mVersion)));
+		//std::vector<std::vector<bool>> result(GetDataRegionMask(type, version.mVersion));
 		unsigned quietZoneWidth = type == SymbolType::MICRO ? 2 : 4;
 
 		DrawFinderPatterns(result, 0, 0);
 		if (type != SymbolType::MICRO)
 		{
-			DrawFinderPatterns(result, 0, GetSymbolSize(type, version) - 7);
-			DrawFinderPatterns(result, GetSymbolSize(type, version) - 7, 0);
+			DrawFinderPatterns(result, 0, GetSymbolSize(type, version.mVersion) - 7);
+			DrawFinderPatterns(result, GetSymbolSize(type, version.mVersion) - 7, 0);
+			DrawAlignmentPatterns(result, version.mVersion);
 		}
-		DrawTimingPatterns(result, type, version);
-		DrawAlignmentPatterns(result, version);
+		DrawTimingPatterns(result, type, version.mVersion);
 
 		//Add quiet zone
 		for (auto &row : result)
@@ -176,12 +247,32 @@ namespace QR
 			row.insert(row.end(), quietZoneWidth, false);
 		}
 
-		for (auto i = 0u; i < quietZoneWidth; ++i)
+		for (unsigned i = 0; i < quietZoneWidth; ++i)
 		{
-			result.insert(result.begin(), std::vector<bool>(GetSymbolSize(type, version) + quietZoneWidth * 2));
-			result.insert(result.end(), std::vector<bool>(GetSymbolSize(type, version) + quietZoneWidth * 2));
+			result.insert(result.begin(), std::vector<bool>(GetSymbolSize(type, version.mVersion) + quietZoneWidth * 2));
+			result.insert(result.end(), std::vector<bool>(GetSymbolSize(type, version.mVersion) + quietZoneWidth * 2));
 		}
 
 		return result;
 	}
+}
+
+QR::Version operator""_L(std::uint64_t version)
+{
+	return QR::Version{ static_cast<std::uint8_t>(version), QR::ErrorCorrectionLevel::L };
+}
+
+QR::Version operator""_M(std::uint64_t version)
+{
+	return QR::Version{ static_cast<std::uint8_t>(version), QR::ErrorCorrectionLevel::M };
+}
+
+QR::Version operator""_Q(std::uint64_t version)
+{
+	return QR::Version{ static_cast<std::uint8_t>(version), QR::ErrorCorrectionLevel::Q };
+}
+
+QR::Version operator""_H(std::uint64_t version)
+{
+	return QR::Version{ static_cast<std::uint8_t>(version), QR::ErrorCorrectionLevel::H };
 }
