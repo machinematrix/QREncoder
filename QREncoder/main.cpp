@@ -60,7 +60,7 @@ int main()
 		//auto color = image.getPixelColor({ 0, 0 });
 		//auto color2 = image.getPixelColor({ 1, 0 });
 		//auto color3 = image.getPixelColor({ 2, 0 });
-		BMPImage image = QRToBMP(QR::Encode("asd", QR::SymbolType::NORMAL, 7_L), 4);
+		BMPImage image = QRToBMP(QR::Encode("asd", QR::SymbolType::MICRO_QR, 7_L, QR::Mode::BYTE), 1);
 
 		output << image;
 	}

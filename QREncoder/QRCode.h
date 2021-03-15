@@ -2,20 +2,19 @@
 #define QRCODE_H
 #include <vector>
 #include <string_view>
-#include <memory>
 
 namespace QR
 {
-	enum class SymbolType { NORMAL, MICRO };
-	enum class Mode { NUMERIC, ALPHANUMERIC, BYTE, KANJI };
-	enum class ErrorCorrectionLevel { L, M, Q, H };
+	enum class SymbolType : std::uint8_t { QR, MICRO_QR };
+	enum class ErrorCorrectionLevel : std::uint8_t { L, M, Q, H, NONE };
+	enum class Mode : std::uint8_t { NUMERIC, ALPHANUMERIC, BYTE, KANJI };
 	struct Version
 	{
 		std::uint8_t mVersion;
 		ErrorCorrectionLevel mLevel;
 	};
 
-	std::vector<std::vector<bool>> Encode(std::string_view message, SymbolType type, Version version);
+	std::vector<std::vector<bool>> Encode(std::string_view message, SymbolType type, Version version, Mode mode);
 }
 
 QR::Version operator""_L(std::uint64_t);
