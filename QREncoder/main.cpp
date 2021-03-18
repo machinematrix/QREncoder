@@ -2,6 +2,7 @@
 #include <fstream>
 #include <array>
 #include <vector>
+#include <regex>
 #include "Image.h"
 #include "QRCode.h"
 
@@ -34,34 +35,7 @@ int main()
 
 	if (output.is_open())
 	{
-		//short width = 159, height = 159;
-		//BMPImage image(width, height, 1);
-
-		//image.setPixelColor({ 1, 1 }, { 0, 0, 0 });
-
-		//for (std::uint16_t i = 0; i < height; ++i)
-		//{
-		//	for (std::uint16_t j = 0; j < width; ++j)
-		//	{
-		//		Color color/* = { 255, 255, 255 }*/;
-		//		std::uint16_t xModulo = j % 2, yModulo = i % 2;
-
-		//		if (/*(xModulo || yModulo) && !(xModulo && yModulo)*/!((i * j) % 2 + (i * j) % 3))
-		//			color = { 0, 0, 0 };
-		//		else
-		//			color = { 255, 255, 255 };
-
-		//		image.setPixelColor({ j, i }, color);
-		//	}
-
-		//	//image.setPixelColor({ i, i }, { 0, 0, 128 });
-		//}
-
-		//auto color = image.getPixelColor({ 0, 0 });
-		//auto color2 = image.getPixelColor({ 1, 0 });
-		//auto color3 = image.getPixelColor({ 2, 0 });
-		BMPImage image = QRToBMP(QR::Encode("HELLO WORLD", QR::SymbolType::QR, 1_H, QR::Mode::BYTE), 1);
-
+		BMPImage image = QRToBMP(QR::Encode("HELLO WORLD", QR::SymbolType::QR, 2_Q, QR::Mode::BYTE), 1);
 		output << image;
 	}
 

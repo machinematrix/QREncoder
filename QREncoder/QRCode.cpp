@@ -441,6 +441,7 @@ namespace QR
 			return centers.at(version - 1);
 		}
 
+		//Returns a matrix with all the bits that correspond to function patterns or version/format information set to true
 		std::vector<std::vector<bool>> GetDataRegionMask(SymbolType type, std::uint8_t version)
 		{
 			using std::vector;
@@ -507,6 +508,78 @@ namespace QR
 				for (unsigned x = rectangle.mFrom.mX; x <= rectangle.mTo.mX; ++x)
 					for (unsigned y = rectangle.mFrom.mY; y <= rectangle.mTo.mY; ++y)
 						result[y][x] = true;
+
+			return result;
+		}
+
+		//From table 10, page 50.
+		bool GetMaskBit(SymbolType type, std::uint8_t maskId, Symbol::size_type i, Symbol::size_type j)
+		{
+			bool result = false;
+
+			if (type == SymbolType::MICRO_QR)
+				switch (maskId)
+				{
+					case 0b00:
+						maskId = 0b001;
+						break;
+
+					case 0b01:
+						maskId = 0b100;
+						break;
+
+					case 0b10:
+						maskId = 0b110;
+						break;
+
+					case 0b11:
+						maskId = 0b111;
+						break;
+				}
+
+			switch (maskId)
+			{
+				case 0b000:
+					result = !((i + j) % 2);
+					break;
+
+				case 0b001:
+					result = !(j % 2);
+					break;
+
+				case 0b010:
+					result = !(j % 3);
+					break;
+
+				case 0b011:
+					result = !((i + j) % 3);
+					break;
+
+				case 0b100:
+					result = !((j / 2 + j / 3) % 2);
+					break;
+
+				case 0b101:
+					result = !((i * j) % 2 + (i * j) % 3);
+					break;
+
+				case 0b110:
+					result = !(((i * j) % 2 + (i * j) % 3) % 2);
+					break;
+
+				case 0b111:
+					result = !(((i + j) % 2 + (i * j) % 3) % 2);
+					break;
+			}
+
+			return result;
+		}
+
+		unsigned GetSymbolRating(const Symbol &symbol, SymbolType type, std::uint8_t version)
+		{
+			unsigned result = 0;
+
+
 
 			return result;
 		}
@@ -594,12 +667,13 @@ namespace QR
 		using std::tuple;
 		using std::bitset;
 		using std::get;
-		vector<vector<bool>> result(GetSymbolSize(type, version.mVersion), std::vector<bool>(GetSymbolSize(type, version.mVersion)));
+		vector<vector<bool>> result(GetSymbolSize(type, version.mVersion), vector<bool>(GetSymbolSize(type, version.mVersion))), mask = GetDataRegionMask(type, version.mVersion);
 		vector<bool> dataBitStream, terminator = GetTerminator(type, version.mVersion);
 		vector<tuple<Mode, decltype(message)::size_type, decltype(message)::size_type>> modeRanges = { { mode, 0, message.size() } }; //<type, [from, to)>
 		BlockLayoutVector layouts = GetBlockLayout(type, version);
 		vector<vector<bitset<8>>> dataBlocks, errorCorrectionBlocks;
 		decltype(dataBitStream)::size_type bitIndex = 0;
+		int currentRow = GetSymbolSize(type, version.mVersion) - 1, currentColumn = currentRow, delta = -1;
 		unsigned quietZoneWidth = type == SymbolType::MICRO_QR ? 2 : 4;
 		unsigned dataModuleCount = GetDataModuleCount(type, version.mVersion) - GetRemainderBitCount(type, version.mVersion) - GetErrorCorrectionCodewordCount(type, version) * 8;
 
@@ -614,27 +688,37 @@ namespace QR
 		
 		for (const auto &range : modeRanges)
 		{
-			switch (std::get<0>(range))
-			{
-				case Mode::ALPHANUMERIC:
-				{
+			auto modeIndicator = GetModeIndicator(type, version.mVersion, mode);
+			auto countIndicator = GetCharacterCountIndicator(type, version.mVersion, mode, static_cast<std::uint16_t>(message.size()));
 
+			dataBitStream.insert(dataBitStream.end(), modeIndicator.begin(), modeIndicator.end());
+			dataBitStream.insert(dataBitStream.end(), countIndicator.begin(), countIndicator.end());
+
+			switch (get<0>(range))
+			{
+				case Mode::NUMERIC:
+				{
+					/*decltype(dataBitStream)::size_type codeword = dataBitStream.size(), newSize = (get<2>(range) - get<1>(range)) / 3 * 10;
+
+					if (auto remainder = (get<2>(range) - get<1>(range)) % 3)
+						newSize += remainder * 3 + 1;
+
+					dataBitStream.resize(dataBitStream.size() + newSize);
+
+					for (auto i = get<1>(range); i < get<2>(range); ++i, codeword += 8)
+						for (decltype(result)::size_type bit = 8; bit--;)
+							dataBitStream.at(codeword + bit) = message[i] & 1 << 7 >> bit ? true : false;*/
 
 					break;
 				}
 
 				case Mode::BYTE:
 				{
-					auto modeIndicator = GetModeIndicator(type, version.mVersion, mode), terminator = GetTerminator(type, version.mVersion);
-					auto countIndicator = GetCharacterCountIndicator(type, version.mVersion, mode, static_cast<std::uint16_t>(message.size()));
-					decltype(dataBitStream)::size_type codeword;
+					decltype(dataBitStream)::size_type codeword = dataBitStream.size();
 
-					dataBitStream.insert(dataBitStream.end(), modeIndicator.begin(), modeIndicator.end());
-					dataBitStream.insert(dataBitStream.end(), countIndicator.begin(), countIndicator.end());
-					codeword = dataBitStream.size();
-					dataBitStream.resize(dataBitStream.size() + (std::get<2>(range) - std::get<1>(range)) * 8);
+					dataBitStream.resize(dataBitStream.size() + (get<2>(range) - get<1>(range)) * 8);
 
-					for (auto i = std::get<1>(range); i < std::get<2>(range); ++i, codeword += 8)
+					for (auto i = get<1>(range); i < get<2>(range); ++i, codeword += 8)
 						for (decltype(result)::size_type bit = 8; bit--;)
 							dataBitStream.at(codeword + bit) = message[i] & 1 << 7 >> bit ? true : false;
 
@@ -658,7 +742,7 @@ namespace QR
 
 			if (dataBitStream.size() < dataModuleCount)
 			{
-				std::vector<std::vector<bool>> padCodewords;
+				vector<vector<bool>> padCodewords;
 				decltype(padCodewords)::size_type counter = 0;
 
 				if (type == SymbolType::MICRO_QR && (version.mVersion == 1 || version.mVersion == 3))
@@ -676,6 +760,7 @@ namespace QR
 		{
 			decltype(dataBlocks)::value_type block(get<2>(blockLayout)), errorBlock;
 			auto &generatorPolynomial = GetGeneratorPolynomialCoefficientExponents(get<1>(blockLayout) - get<2>(blockLayout));
+			unsigned n = get<2>(blockLayout);
 
 			for (auto &codeword : block)
 				for (decltype(dataBitStream)::size_type i = codeword.size(); i--;)
@@ -684,25 +769,68 @@ namespace QR
 			errorBlock = block;
 			errorBlock.resize(get<1>(blockLayout));
 
-			for (unsigned n = 0; n < get<2>(blockLayout); ++n)
+			while (n--)
 			{
-				auto current = GetAlphaExponent(errorBlock.front().to_ulong());
+				auto current = errorBlock.front().to_ulong();
 
 				errorBlock.erase(errorBlock.begin());
 
-				for (unsigned i = 0; i < generatorPolynomial.size(); ++i)
+				if (current)
 				{
-					auto generatorSum = current + generatorPolynomial[i];
+					current = GetAlphaExponent(current);
 
-					if (generatorSum > 255)
-						generatorSum %= 255;
+					for (unsigned i = 0; i < generatorPolynomial.size(); ++i)
+					{
+						auto exponentSum = current + generatorPolynomial[i];
 
-					errorBlock[i] = errorBlock[i].to_ulong() ^ GetAlphaValue(generatorSum);
+						if (exponentSum > 255)
+							exponentSum %= 255;
+
+						errorBlock[i] = errorBlock[i].to_ulong() ^ GetAlphaValue(exponentSum);
+					}
 				}
 			}
 
 			dataBlocks.resize(dataBlocks.size() + get<0>(blockLayout), block);
 			errorCorrectionBlocks.resize(errorCorrectionBlocks.size() + get<0>(blockLayout), errorBlock);
+		}
+
+		for (const auto &blocks : { dataBlocks, errorCorrectionBlocks })
+		{
+			auto maxLength = std::max_element(blocks.begin(), blocks.end(), [](const decltype(dataBlocks)::value_type &lhs, const decltype(dataBlocks)::value_type &rhs) { return lhs.size() < rhs.size(); })->size();
+
+			for (decltype(maxLength) codewordIndex = 0; codewordIndex < maxLength; ++codewordIndex)
+			{
+				for (const auto &block : blocks)
+				{
+					if (codewordIndex < block.size())
+					{
+						for (int bitIndex = block[codewordIndex].size(); bitIndex;)
+						{
+							if (!mask[currentRow][currentColumn])
+								result[currentRow][currentColumn] = block[codewordIndex][--bitIndex];
+
+							if (currentColumn > 6 && currentColumn % 2 || currentColumn < 6 && !(currentColumn % 2))
+							{
+								if (!currentRow && delta != 1)
+									delta = 1, currentColumn -= 2;
+								else
+									if (currentRow == GetSymbolSize(type, version.mVersion) - 1 && delta != -1)
+										delta = -1, currentColumn -= 2;
+									else
+										currentRow += delta;
+
+								++currentColumn;
+
+								if (currentColumn == 6)
+									currentColumn = 5;
+							}
+							else
+								--currentColumn;
+						}
+					}
+				}
+			}
 		}
 
 		//Add quiet zone
