@@ -6,6 +6,7 @@
 #include <tuple>
 #include <bitset>
 #include <algorithm>
+#include <charconv>
 #include <cmath>
 
 namespace QR
@@ -540,7 +541,7 @@ namespace QR
 			return result;
 		}
 
-		const std::vector<Symbol::size_type> &GetAlignmentPatternCenters(std::uint8_t version)
+		const std::vector<Symbol::size_type>& GetAlignmentPatternCenters(std::uint8_t version)
 		{
 			static const std::array<std::vector<Symbol::size_type>, 40> centers = { {
 				{},
@@ -655,6 +656,53 @@ namespace QR
 				for (unsigned x = rectangle.mFrom.mX; x <= rectangle.mTo.mX; ++x)
 					for (unsigned y = rectangle.mFrom.mY; y <= rectangle.mTo.mY; ++y)
 						result[y][x] = true;
+
+			return result;
+		}
+
+		std::uint8_t GetAlphanumericCode(std::uint8_t asciiCharacter)
+		{
+			std::uint8_t result = 45;
+
+			if (std::isdigit(asciiCharacter))
+				result = asciiCharacter - '0';
+			else
+				if (std::isalpha(asciiCharacter))
+					if (std::isupper(asciiCharacter))
+						result = asciiCharacter - 'A' + 10;
+					else
+						result = asciiCharacter - 'a' + 10;
+				else
+					switch (asciiCharacter)
+					{
+						case ' ':
+							result = 36;
+							break;
+						case '$':
+							result = 37;
+							break;
+						case '%':
+							result = 38;
+							break;
+						case '*':
+							result = 39;
+							break;
+						case '+':
+							result = 40;
+							break;
+						case '-':
+							result = 41;
+							break;
+						case '.':
+							result = 42;
+							break;
+						case '/':
+							result = 43;
+							break;
+						case ':':
+							result = 44;
+							break;
+					}
 
 			return result;
 		}
@@ -990,32 +1038,59 @@ std::vector<std::vector<bool>> QR::Encode(std::string_view message, SymbolType t
 		{
 			case Mode::NUMERIC:
 			{
-				decltype(dataBitStream)::size_type codeword = dataBitStream.size(), newSize = (get<2>(range) - get<1>(range)) / 3 * 10;
-				auto remainder = (get<2>(range) - get<1>(range)) % 3;
+				decltype(dataBitStream)::size_type codeword = dataBitStream.size();
+				auto characterCount = get<2>(range) - get<1>(range);
 
-				if (remainder)
-					newSize += remainder * 3 + 1;
+				dataBitStream.resize(dataBitStream.size() + characterCount / 3 * 10 + (characterCount % 3 ? characterCount % 3 * 3 + 1 : 0));
 
-				dataBitStream.resize(dataBitStream.size() + newSize);
-
-				if ((get<2>(range) - get<1>(range)) / 3)
+				if (characterCount / 3)
 				{
 					for (auto i = get<1>(range); i <= get<2>(range) - 3; i += 3, codeword += 10)
 					{
-						unsigned numberTriplet = std::stoul(std::string(message.data() + i, message.data() + i + 3));
+						unsigned numberTriplet = 0;
+						std::from_chars(message.data() + i, message.data() + i + 3, numberTriplet);
 
-						for (decltype(result)::size_type bit = 10; bit--;)
+						for (decltype(result)::size_type bit = 0; bit < 10; ++bit)
 							dataBitStream[codeword + bit] = numberTriplet & 1 << 9 >> bit;
 					}
 				}
 
-				if (remainder)
+				if (characterCount % 3)
 				{
-					unsigned remainderBits = remainder * 3 + 1;
-					unsigned encodedRemainder = std::stoul(std::string(message.data() + get<2>(range) - remainder, get<2>(range)));
+					unsigned remainderBits = characterCount % 3 * 3 + 1, encodedRemainder = 0;
+					std::from_chars(message.data() + get<2>(range) - characterCount % 3, message.data() + get<2>(range), encodedRemainder);
 
-					for (decltype(result)::size_type bit = remainderBits; bit--;)
+					for (decltype(result)::size_type bit = 0; bit < remainderBits; ++bit)
 						dataBitStream[dataBitStream.size() - remainderBits + bit] = encodedRemainder & 1 << remainderBits - 1 >> bit;
+				}
+
+				break;
+			}
+
+			case Mode::ALPHANUMERIC:
+			{
+				decltype(dataBitStream)::size_type characterOffset = dataBitStream.size();
+				auto characterCount = get<2>(range) - get<1>(range);
+
+				dataBitStream.resize(dataBitStream.size() + characterCount / 2 * 11 + characterCount % 2 * 6);
+				
+				if (characterCount / 2)
+				{
+					for (auto i = get<1>(range); i <= get<2>(range) - 2; i += 2, characterOffset += 11)
+					{
+						unsigned encodedPair = GetAlphanumericCode(message[i]) * 45 + GetAlphanumericCode(message[i + 1]);
+
+						for (decltype(result)::size_type bit = 0; bit < 11; ++bit)
+							dataBitStream[characterOffset + bit] = encodedPair & 1 << 10 >> bit;
+					}
+				}
+
+				if (characterCount % 2)
+				{
+					unsigned lastCharacter = GetAlphanumericCode(message[get<2>(range) - 1]);
+
+					for (decltype(result)::size_type bit = 0; bit < 6; ++bit)
+						dataBitStream[characterOffset + bit] = lastCharacter & 1 << 5 >> bit;
 				}
 
 				break;
@@ -1127,7 +1202,6 @@ std::vector<std::vector<bool>> QR::Encode(std::string_view message, SymbolType t
 						if (type == SymbolType::MICRO_QR && currentColumn % 2 ||
 							type == SymbolType::QR && currentColumn > 6 && currentColumn % 2 ||
 							type == SymbolType::QR && currentColumn < 6 && !(currentColumn % 2))
-						//if (currentColumn > 6 && currentColumn % 2 || currentColumn < 6 && !(currentColumn % 2))
 						{
 							if (!currentRow && delta != 1)
 								delta = 1, currentColumn -= 2;
