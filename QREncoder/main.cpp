@@ -70,7 +70,7 @@ int main(int argc, char **argv)
 			output.open(argv[3], std::ios_base::binary);
 
 			if (output.is_open())
-				output << QRToBMP(QR::Encode(argv[1], type, version, level, QR::Mode::BYTE), 1);
+				output << QRToBMP(QR::Encode(argv[1], type, version, level, QR::Mode::BYTE), 8);
 			else
 			{
 				cerr << "Could not open file" << endl;
@@ -83,7 +83,7 @@ int main(int argc, char **argv)
 				std::ofstream output(argv[3], std::ios_base::binary);
 
 				if (output.is_open())
-					output << QRToBMP(QR::Encode(argv[1], QR::SymbolType::MICRO_QR, 1, QR::ErrorCorrectionLevel::ERROR_DETECTION_ONLY, QR::Mode::BYTE), 1);
+					output << QRToBMP(QR::Encode(argv[1], QR::SymbolType::MICRO_QR, 1, QR::ErrorCorrectionLevel::ERROR_DETECTION_ONLY, QR::Mode::BYTE), 8);
 				else
 				{
 					cerr << "Could not open file" << endl;

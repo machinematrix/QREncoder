@@ -732,6 +732,106 @@ namespace QR
 			return result;
 		}
 
+		unsigned GetSymbolRating(const Symbol &symbol, SymbolType type)
+		{
+			if (type == SymbolType::QR)
+			{
+				static const std::vector<bool> feature3Pattern = { 1, 0, 1, 1, 1, 0, 1 };
+				unsigned feature1Score = 0, feature2Score = 0, feature3Score = 0, feature4Score = 0;
+				unsigned totalModules = symbol.size() * symbol.size(), darkModules = 0;
+				int percentage = 0;
+
+				for (Symbol::size_type i = 0; i < symbol.size(); ++i)
+				{
+					unsigned consecutiveRowCounter = 0, consecutiveColumnCounter = 0, feature3Row = 0, feature3Column = 0;
+					bool consecutiveRowValue = false, consecutiveColumnValue = false;
+
+					for (Symbol::value_type::size_type j = 0; j < symbol[i].size(); ++j)
+					{
+						//Feature 1
+						if (symbol[i][j] == consecutiveRowValue)
+							++consecutiveRowCounter;
+						else
+						{
+							feature1Score += GetFeature1Points(consecutiveRowCounter);
+							consecutiveRowValue = symbol[i][j], consecutiveRowCounter = 1;
+						}
+
+						if (symbol[j][i] == consecutiveColumnValue)
+							++consecutiveColumnCounter;
+						else
+						{
+							feature1Score += GetFeature1Points(consecutiveColumnCounter);
+							consecutiveColumnValue = symbol[j][i], consecutiveColumnCounter = 1;
+						}
+
+						//Feature 2
+						if (i < symbol.size() - 1 &&
+							j < symbol[i].size() - 1 &&
+							symbol[i][j] == symbol[i][j + 1] &&
+							symbol[i][j] == symbol[i + 1][j] &&
+							symbol[i][j] == symbol[i + 1][j + 1])
+							feature2Score += 3;
+
+						//Feature 3
+						if (symbol[i][j] == feature3Pattern[feature3Row])
+							++feature3Row;
+
+						if (symbol[j][i] == feature3Pattern[feature3Column])
+							++feature3Column;
+
+						if (feature3Column == feature3Pattern.size())
+						{
+							if (i + 4 < symbol.size() && !symbol[i + 1][j] && !symbol[i + 2][j] && !symbol[i + 3][j] && !symbol[i + 4][j] ||
+								i >= 10 && !symbol[i - 7][j] && !symbol[i - 8][j] && !symbol[i - 9][j] && !symbol[i - 10][j])
+								feature3Score += 40;
+
+							feature3Column = 0;
+						}
+
+						if (feature3Row == feature3Pattern.size())
+						{
+							if (j + 4 < symbol.size() && !symbol[i][j + 1] && !symbol[i][j + 2] && !symbol[i][j + 3] && !symbol[i][j + 4] ||
+								j >= 10 && !symbol[i][j - 7] && !symbol[i][j - 8] && !symbol[i][j - 9] && !symbol[i][j - 10])
+								feature3Score += 40;
+
+							feature3Row = 0;
+						}
+
+						//Feature 4
+						if (symbol[j][i])
+							++darkModules;
+					}
+
+					//Feature 1
+					//In case the row/column ended without breaking the chain of consecutive modules
+					feature1Score += GetFeature1Points(consecutiveRowCounter);
+					feature1Score += GetFeature1Points(consecutiveColumnCounter);
+				}
+
+				percentage = static_cast<double>(darkModules) / static_cast<double>(totalModules) * 100.;
+				feature4Score = std::abs(percentage - 50) / 5 * 10;
+
+				return feature1Score + feature2Score + feature3Score + feature4Score;
+			}
+			else
+			{
+				unsigned darkRow = 0, darkColumn = 0;
+
+				//Start at 1 to avoid timing pattern
+				for (Symbol::size_type i = 1, sz = symbol.size(); i < sz; ++i)
+				{
+					if (symbol[i][sz - 1])
+						++darkColumn;
+
+					if (symbol[sz - 1][i])
+						++darkRow;
+				}
+
+				return darkColumn <= darkRow ? darkColumn * 16 + darkRow : darkRow * 16 + darkColumn;
+			}
+		}
+
 		void DrawFinderPattern(Symbol &symbol, Symbol::size_type startingRow, Symbol::size_type startingColumn)
 		{
 			for (decltype(startingRow) i = startingRow; i < startingRow + 7; ++i)
@@ -852,115 +952,13 @@ namespace QR
 	#endif
 }
 
-using namespace QR;
-
-unsigned GetSymbolRating(const Symbol &symbol, SymbolType type)
-{
-	if (type == SymbolType::QR)
-	{
-		static const std::vector<bool> feature3Pattern = { 1, 0, 1, 1, 1, 0, 1 };
-		unsigned feature1Score = 0, feature2Score = 0, feature3Score = 0, feature4Score = 0;
-		unsigned totalModules = symbol.size() * symbol.size(), darkModules = 0;
-		int percentage = 0;
-
-		for (Symbol::size_type i = 0; i < symbol.size(); ++i)
-		{
-			unsigned consecutiveRowCounter = 0, consecutiveColumnCounter = 0, feature3Row = 0, feature3Column = 0;
-			bool consecutiveRowValue = false, consecutiveColumnValue = false;
-
-			for (Symbol::value_type::size_type j = 0; j < symbol[i].size(); ++j)
-			{
-				//Feature 1
-				if (symbol[i][j] == consecutiveRowValue)
-					++consecutiveRowCounter;
-				else
-				{
-					feature1Score += GetFeature1Points(consecutiveRowCounter);
-					consecutiveRowValue = symbol[i][j], consecutiveRowCounter = 1;
-				}
-
-				if (symbol[j][i] == consecutiveColumnValue)
-					++consecutiveColumnCounter;
-				else
-				{
-					feature1Score += GetFeature1Points(consecutiveColumnCounter);
-					consecutiveColumnValue = symbol[j][i], consecutiveColumnCounter = 1;
-				}
-
-				//Feature 2
-				if (i < symbol.size() - 1 &&
-					j < symbol[i].size() - 1 &&
-					symbol[i][j] == symbol[i][j + 1] &&
-					symbol[i][j] == symbol[i + 1][j] &&
-					symbol[i][j] == symbol[i + 1][j + 1])
-					feature2Score += 3;
-
-				//Feature 3
-				if (symbol[i][j] == feature3Pattern[feature3Row])
-					++feature3Row;
-
-				if (symbol[j][i] == feature3Pattern[feature3Column])
-					++feature3Column;
-
-				if (feature3Column == feature3Pattern.size())
-				{
-					if (i + 4 < symbol.size() && !symbol[i + 1][j] && !symbol[i + 2][j] && !symbol[i + 3][j] && !symbol[i + 4][j] ||
-						i >= 10 && !symbol[i - 7][j] && !symbol[i - 8][j] && !symbol[i - 9][j] && !symbol[i - 10][j])
-						feature3Score += 40;
-
-					feature3Column = 0;
-				}
-
-				if (feature3Row == feature3Pattern.size())
-				{
-					if (j + 4 < symbol.size() && !symbol[i][j + 1] && !symbol[i][j + 2] && !symbol[i][j + 3] && !symbol[i][j + 4] ||
-						j >= 10 && !symbol[i][j - 7] && !symbol[i][j - 8] && !symbol[i][j - 9] && !symbol[i][j - 10])
-						feature3Score += 40;
-
-					feature3Row = 0;
-				}
-
-				//Feature 4
-				if (symbol[j][i])
-					++darkModules;
-			}
-
-			//Feature 1
-			//In case the row/column ended without breaking the chain of consecutive modules
-			feature1Score += GetFeature1Points(consecutiveRowCounter);
-			feature1Score += GetFeature1Points(consecutiveColumnCounter);
-		}
-
-		percentage = static_cast<double>(darkModules) / static_cast<double>(totalModules) * 100.;
-		feature4Score = std::abs(percentage - 50) / 5 * 10;
-
-		return feature1Score + feature2Score + feature3Score + feature4Score;
-	}
-	else
-	{
-		unsigned darkRow = 0, darkColumn = 0;
-
-		//Start at 1 to avoid timing pattern
-		for (Symbol::size_type i = 1, sz = symbol.size(); i < sz; ++i)
-		{
-			if (symbol[i][sz - 1])
-				++darkColumn;
-
-			if (symbol[sz - 1][i])
-				++darkRow;
-		}
-
-		return darkColumn <= darkRow ? darkColumn * 16 + darkRow : darkRow * 16 + darkColumn;
-	}
-}
-
 std::vector<std::vector<bool>> QR::Encode(std::string_view message, SymbolType type, std::uint8_t version, ErrorCorrectionLevel level, Mode mode)
 {
 	using std::vector; using std::tuple; using std::bitset; using std::get;
 	vector<vector<bool>> result(GetSymbolSize(type, version), vector<bool>(GetSymbolSize(type, version))), mask = GetDataRegionMask(type, version);
 	vector<Symbol> maskedSymbols;
 	vector<unsigned> maskedSymbolScores;
-	vector<bool> dataBitStream, terminator = GetTerminator(type, version);
+	vector<bool> dataBitStream;
 	vector<tuple<Mode, decltype(message)::size_type, decltype(message)::size_type>> modeRanges = { { mode, 0, message.size() } }; //<type, [from, to)>
 	BlockLayoutVector layouts = GetBlockLayout(type, version, level);
 	vector<vector<bitset<8>>> dataBlocks, errorCorrectionBlocks;
@@ -1000,12 +998,15 @@ std::vector<std::vector<bool>> QR::Encode(std::string_view message, SymbolType t
 
 				dataBitStream.resize(dataBitStream.size() + newSize);
 
-				for (auto i = get<1>(range); i < get<2>(range) - 3; i += 3, codeword += 10)
+				if ((get<2>(range) - get<1>(range)) / 3)
 				{
-					unsigned numberTriplet = std::stoul(std::string(message.data() + i, message.data() + i + 3));
+					for (auto i = get<1>(range); i <= get<2>(range) - 3; i += 3, codeword += 10)
+					{
+						unsigned numberTriplet = std::stoul(std::string(message.data() + i, message.data() + i + 3));
 
-					for (decltype(result)::size_type bit = 10; bit--;)
-						dataBitStream[codeword + bit] = numberTriplet & 1 << 9 >> bit;
+						for (decltype(result)::size_type bit = 10; bit--;)
+							dataBitStream[codeword + bit] = numberTriplet & 1 << 9 >> bit;
+					}
 				}
 
 				if (remainder)
@@ -1038,6 +1039,8 @@ std::vector<std::vector<bool>> QR::Encode(std::string_view message, SymbolType t
 	//Add terminator and pad codewords
 	if (dataBitStream.size() <= dataModuleCount)
 	{
+		auto terminator = GetTerminator(type, version);
+
 		dataBitStream.insert(dataBitStream.end(), terminator.begin(), terminator.begin() + std::min(dataModuleCount - dataBitStream.size(), terminator.size()));
 
 		if (dataBitStream.size() < dataModuleCount && dataBitStream.size() % 8)
@@ -1121,7 +1124,10 @@ std::vector<std::vector<bool>> QR::Encode(std::string_view message, SymbolType t
 						if (!mask[currentRow][currentColumn])
 							result[currentRow][currentColumn] = block[codewordIndex][--bitIndex];
 
-						if (currentColumn > 6 && currentColumn % 2 || currentColumn < 6 && !(currentColumn % 2))
+						if (type == SymbolType::MICRO_QR && currentColumn % 2 ||
+							type == SymbolType::QR && currentColumn > 6 && currentColumn % 2 ||
+							type == SymbolType::QR && currentColumn < 6 && !(currentColumn % 2))
+						//if (currentColumn > 6 && currentColumn % 2 || currentColumn < 6 && !(currentColumn % 2))
 						{
 							if (!currentRow && delta != 1)
 								delta = 1, currentColumn -= 2;
