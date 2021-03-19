@@ -5,16 +5,17 @@
 #include <tuple>
 #include <bitset>
 #include <algorithm>
-
-#include <iostream>
+#include <cmath>
 
 namespace QR
 {
 	using Symbol = std::vector<std::vector<bool>>;
 	using BlockLayoutVector = std::vector<std::tuple<unsigned, unsigned, unsigned>>;
-	
+
+	#ifdef NDEBUG
 	namespace
 	{
+		#endif
 		unsigned GetSymbolSize(SymbolType type, std::uint8_t version)
 		{
 			unsigned result = 0;
@@ -69,7 +70,7 @@ namespace QR
 			return result;
 		}
 
-		const std::vector<unsigned>& GetGeneratorPolynomialCoefficientExponents(unsigned errorCorrectionCodewordCount)
+		const std::vector<unsigned>& GetPolynomialCoefficientExponents(unsigned errorCorrectionCodewordCount)
 		{
 			static const std::unordered_map<unsigned, std::vector<unsigned>> polynomials = {
 				{ 2, { 25, 1 } },
@@ -162,7 +163,7 @@ namespace QR
 		}
 
 		//From table 9, page 38. <count, total, data>
-		BlockLayoutVector GetBlockLayout(SymbolType type, Version version)
+		BlockLayoutVector GetBlockLayout(SymbolType type, std::uint8_t version, ErrorCorrectionLevel level)
 		{
 			using std::array;
 			using std::vector;
@@ -218,15 +219,15 @@ namespace QR
 			vector<tuple<unsigned, unsigned, unsigned>> result;
 
 			if (type == SymbolType::MICRO_QR)
-				result = { microBlockLayouts[version.mVersion - 1][static_cast<decltype(microBlockLayouts)::size_type>(version.mLevel)] };
+				result = { microBlockLayouts[version - 1][static_cast<decltype(microBlockLayouts)::size_type>(level)] };
 			else
-				result = blockLayouts[version.mVersion - 1][static_cast<decltype(microBlockLayouts)::size_type>(version.mLevel)];
+				result = blockLayouts[version - 1][static_cast<decltype(microBlockLayouts)::size_type>(level)];
 
 			return result;
 		}
 
 		//From table 9, page 38
-		unsigned GetErrorCorrectionCodewordCount(SymbolType type, Version version)
+		unsigned GetErrorCorrectionCodewordCount(SymbolType type, std::uint8_t version, ErrorCorrectionLevel level)
 		{
 			static const std::array<std::array<unsigned, 4>, 4> microCodewordCount = { {
 				{ 2 }, //This will be used for M1 symbols, ErrorCorrectionLevel will be NONE
@@ -280,13 +281,13 @@ namespace QR
 
 			if (type == SymbolType::MICRO_QR)
 			{
-				if (version.mVersion == 1)
+				if (version == 1)
 					result = microCodewordCount[0][0];
 				else
-					result = microCodewordCount[version.mVersion - 1][static_cast<decltype(microCodewordCount)::size_type>(version.mLevel)];
+					result = microCodewordCount[version - 1][static_cast<decltype(microCodewordCount)::size_type>(level)];
 			}
 			else
-				result = codewordCount[version.mVersion - 1][static_cast<decltype(codewordCount)::size_type>(version.mLevel)];
+				result = codewordCount[version - 1][static_cast<decltype(codewordCount)::size_type>(level)];
 
 			return result;
 		}
@@ -334,19 +335,13 @@ namespace QR
 			return result;
 		}
 
-		//version parameter is only used for Micro QR
-		std::vector<bool> GetTerminator(SymbolType type, std::uint8_t version)
-		{
-			return std::vector<bool>(type == SymbolType::MICRO_QR ? 3 + (version - 1) * 2 : 4, false);
-		}
-
 		unsigned GetCharacterCountIndicatorLength(Mode mode, SymbolType type, std::uint8_t version)
 		{
 			using TableType = std::array<std::array<unsigned, 4>, 4>;
 			static const TableType microModeLengths = { { { 3 }, { 4, 3 }, { 5, 4, 4, 3 }, { 6, 5, 5, 4 } } };
 			static const TableType modeLengths = { { { 10, 9, 8, 8 }, { 12, 11, 16, 10 }, { 14, 13, 16, 12 } } };
 			unsigned result = 0;
-			
+
 			if (type == SymbolType::MICRO_QR)
 				result = microModeLengths[version][static_cast<size_t>(mode)];
 			else
@@ -361,6 +356,157 @@ namespace QR
 			}
 
 			return result;
+		}
+
+		//version parameter is only used for Micro QR
+		std::vector<bool> GetTerminator(SymbolType type, std::uint8_t version)
+		{
+			return std::vector<bool>(type == SymbolType::MICRO_QR ? 3 + (version - 1) * 2 : 4, false);
+		}
+
+		std::bitset<15> GetFormatInformation(SymbolType type, std::uint8_t version, ErrorCorrectionLevel level, std::uint8_t maskId)
+		{
+			static const std::array<std::bitset<15>, 32> formats = {
+				0b000000000000000,
+				0b000010100110111,
+				0b000101001101110,
+				0b000111101011001,
+				0b001000111101011,
+				0b001010011011100,
+				0b001101110000101,
+				0b001111010110010,
+				0b010001111010110,
+				0b010011011100001,
+				0b010100110111000,
+				0b010110010001111,
+				0b011001000111101,
+				0b011011100001010,
+				0b011100001010011,
+				0b011110101100100,
+				0b100001010011011,
+				0b100011110101100,
+				0b100100011110101,
+				0b100110111000010,
+				0b101001101110000,
+				0b101011001000111,
+				0b101100100011110,
+				0b101110000101001,
+				0b110000101001101,
+				0b110010001111010,
+				0b110101100100011,
+				0b110111000010100,
+				0b111000010100110,
+				0b111010110010001,
+				0b111101011001000,
+				0b111111111111111
+			};
+			std::bitset<5> result;
+			std::bitset<15> mask;
+
+			if (type == SymbolType::QR)
+			{
+				mask = 21522;
+
+				switch (level)
+				{
+					case ErrorCorrectionLevel::L:
+						result[4] = 0;
+						result[3] = 1;
+						break;
+
+					case ErrorCorrectionLevel::M:
+						result[4] = result[3] = 0;
+						break;
+
+					case ErrorCorrectionLevel::Q:
+						result[4] = result[3] = 1;
+						break;
+
+					case ErrorCorrectionLevel::H:
+						result[4] = 1;
+						result[3] = 0;
+						break;
+				}
+
+				result[2] = maskId & 1 << 2;
+				result[1] = maskId & 1 << 1;
+				result[0] = maskId & 1;
+			}
+			else
+			{
+				std::uint8_t symbolNumber = 0;
+				mask = 17477;
+
+				switch (version)
+				{
+
+					case 1:
+					case 2:
+						symbolNumber = version - 1;
+						break;
+
+					case 3:
+						symbolNumber = 3;
+						break;
+
+					case 4:
+						symbolNumber = 5;
+						break;
+				}
+
+				if (level != ErrorCorrectionLevel::ERROR_DETECTION_ONLY)
+					symbolNumber += static_cast<std::uint8_t>(level);
+
+				result[4] = symbolNumber & 1 << 2;
+				result[3] = symbolNumber & 1 << 1;
+				result[2] = symbolNumber & 1;
+				result[1] = maskId & 1 << 1;
+				result[0] = maskId & 1;
+			}
+
+			return formats[result.to_ulong()] ^ mask;
+		}
+
+		std::bitset<18> GetVersionInformation(std::uint8_t version)
+		{
+			static const std::array<std::bitset<18>, 34> versionInformation = {
+				0b000111110010010100,
+				0b001000010110111100,
+				0b001001101010011001,
+				0b001010010011010011,
+				0b001011101111110110,
+				0b001100011101100010,
+				0b001101100001000111,
+				0b001110011000001101,
+				0b001111100100101000,
+				0b010000101101111000,
+				0b010001010001011101,
+				0b010010101000010111,
+				0b010011010100110010,
+				0b010100100110100110,
+				0b010101011010000011,
+				0b010110100011001001,
+				0b010111011111101100,
+				0b011000111011000100,
+				0b011001000111100001,
+				0b011010111110101011,
+				0b011011000010001110,
+				0b011100110000011010,
+				0b011101001100111111,
+				0b011110110101110101,
+				0b011111001001010000,
+				0b100000100111010101,
+				0b100001011011110000,
+				0b100010100010111010,
+				0b100011011110011111,
+				0b100100101100001011,
+				0b100101010000101110,
+				0b100110101001100100,
+				0b100111010101000001,
+				0b101000110001101001
+			};
+
+			return versionInformation[version - 7];
 		}
 
 		//From table 3, page 23
@@ -393,7 +539,7 @@ namespace QR
 			return result;
 		}
 
-		const std::vector<Symbol::size_type>& GetAlignmentPatternCenters(std::uint8_t version)
+		const std::vector<Symbol::size_type> &GetAlignmentPatternCenters(std::uint8_t version)
 		{
 			static const std::array<std::vector<Symbol::size_type>, 40> centers = { {
 				{},
@@ -544,7 +690,7 @@ namespace QR
 					break;
 
 				case 0b001:
-					result = !(j % 2);
+					result = !(i % 2);
 					break;
 
 				case 0b010:
@@ -556,7 +702,7 @@ namespace QR
 					break;
 
 				case 0b100:
-					result = !((j / 2 + j / 3) % 2);
+					result = !((i / 2 + j / 3) % 2);
 					break;
 
 				case 0b101:
@@ -575,11 +721,12 @@ namespace QR
 			return result;
 		}
 
-		unsigned GetSymbolRating(const Symbol &symbol, SymbolType type, std::uint8_t version)
+		unsigned GetFeature1Points(unsigned adjacentCount)
 		{
 			unsigned result = 0;
 
-
+			if (adjacentCount >= 5)
+				result += 3 + adjacentCount - 5;
 
 			return result;
 		}
@@ -641,7 +788,7 @@ namespace QR
 									case 4:
 										symbol[y][x] = symbol[x][y] = true;
 										break;
-									
+
 									case 2:
 										if (x - startX == 0 || x - startX == 2 || x - startX == 4)
 										{
@@ -659,213 +806,368 @@ namespace QR
 							}
 				}
 		}
-	}
 
-	std::vector<std::vector<bool>> QR::Encode(std::string_view message, SymbolType type, Version version, Mode mode)
+		void DrawFormatInformation(Symbol &symbol, SymbolType type, std::uint8_t version, ErrorCorrectionLevel level, std::uint8_t maskId)
+		{
+			auto formatInfo = GetFormatInformation(type, version, level, maskId);
+			unsigned timingPatternRowColumn = type == SymbolType::MICRO_QR ? 0 : 6, symbolSize = GetSymbolSize(type, version), bitIndex = 0;
+
+			for (unsigned i = 0; i < 8; ++i)
+				if (i != timingPatternRowColumn)
+					symbol[i][8] = formatInfo[bitIndex++];
+
+			for (unsigned i = 9; i--;)
+				if (i != timingPatternRowColumn)
+					symbol[8][i] = formatInfo[bitIndex++];
+
+			if (type == SymbolType::QR)
+			{
+				symbol[symbolSize - 8][8] = 1; //This module is always dark
+
+				for (bitIndex = 0; bitIndex < formatInfo.size(); ++bitIndex)
+					if (bitIndex <= 7)
+						symbol[8][symbolSize - 1 - bitIndex] = formatInfo[bitIndex];
+					else
+						symbol[symbolSize - formatInfo.size() + bitIndex][8] = formatInfo[bitIndex];
+			}
+		}
+
+		void DrawVersionInformation(Symbol &symbol, SymbolType type, std::uint8_t version)
+		{
+			auto versionInfo = GetVersionInformation(version);
+			auto symbolSize = GetSymbolSize(type, version);
+
+			for (unsigned i = symbolSize - 11, j = 0, bitIndex = 0; bitIndex < versionInfo.size(); ++i, ++bitIndex)
+			{
+				if (!(bitIndex % 3) && bitIndex)
+					i -= 3, ++j;
+
+				symbol[i][j] = symbol[j][i] = versionInfo[bitIndex];
+			}
+		}
+
+		#ifdef NDEBUG
+	}
+	#endif
+}
+
+using namespace QR;
+
+unsigned GetSymbolRating(const Symbol &symbol, SymbolType type)
+{
+	if (type == SymbolType::QR)
 	{
-		using std::vector;
-		using std::tuple;
-		using std::bitset;
-		using std::get;
-		vector<vector<bool>> result(GetSymbolSize(type, version.mVersion), vector<bool>(GetSymbolSize(type, version.mVersion))), mask = GetDataRegionMask(type, version.mVersion);
-		vector<bool> dataBitStream, terminator = GetTerminator(type, version.mVersion);
-		vector<tuple<Mode, decltype(message)::size_type, decltype(message)::size_type>> modeRanges = { { mode, 0, message.size() } }; //<type, [from, to)>
-		BlockLayoutVector layouts = GetBlockLayout(type, version);
-		vector<vector<bitset<8>>> dataBlocks, errorCorrectionBlocks;
-		decltype(dataBitStream)::size_type bitIndex = 0;
-		int currentRow = GetSymbolSize(type, version.mVersion) - 1, currentColumn = currentRow, delta = -1;
-		unsigned quietZoneWidth = type == SymbolType::MICRO_QR ? 2 : 4;
-		unsigned dataModuleCount = GetDataModuleCount(type, version.mVersion) - GetRemainderBitCount(type, version.mVersion) - GetErrorCorrectionCodewordCount(type, version) * 8;
+		static const std::vector<bool> feature3Pattern = { 1, 0, 1, 1, 1, 0, 1 };
+		unsigned feature1Score = 0, feature2Score = 0, feature3Score = 0, feature4Score = 0;
+		unsigned totalModules = symbol.size() * symbol.size(), darkModules = 0;
+		int percentage = 0;
 
-		DrawFinderPattern(result, 0, 0);
-		if (type != SymbolType::MICRO_QR)
+		for (Symbol::size_type i = 0; i < symbol.size(); ++i)
 		{
-			DrawFinderPattern(result, 0, GetSymbolSize(type, version.mVersion) - 7);
-			DrawFinderPattern(result, GetSymbolSize(type, version.mVersion) - 7, 0);
-			DrawAlignmentPatterns(result, version.mVersion);
-		}
-		DrawTimingPatterns(result, type, version.mVersion);
-		
-		for (const auto &range : modeRanges)
-		{
-			auto modeIndicator = GetModeIndicator(type, version.mVersion, mode);
-			auto countIndicator = GetCharacterCountIndicator(type, version.mVersion, mode, static_cast<std::uint16_t>(message.size()));
+			unsigned consecutiveRowCounter = 0, consecutiveColumnCounter = 0, feature3Row = 0, feature3Column = 0;
+			bool consecutiveRowValue = false, consecutiveColumnValue = false;
 
-			dataBitStream.insert(dataBitStream.end(), modeIndicator.begin(), modeIndicator.end());
-			dataBitStream.insert(dataBitStream.end(), countIndicator.begin(), countIndicator.end());
-
-			switch (get<0>(range))
+			for (Symbol::value_type::size_type j = 0; j < symbol[i].size(); ++j)
 			{
-				case Mode::NUMERIC:
-				{
-					/*decltype(dataBitStream)::size_type codeword = dataBitStream.size(), newSize = (get<2>(range) - get<1>(range)) / 3 * 10;
-
-					if (auto remainder = (get<2>(range) - get<1>(range)) % 3)
-						newSize += remainder * 3 + 1;
-
-					dataBitStream.resize(dataBitStream.size() + newSize);
-
-					for (auto i = get<1>(range); i < get<2>(range); ++i, codeword += 8)
-						for (decltype(result)::size_type bit = 8; bit--;)
-							dataBitStream.at(codeword + bit) = message[i] & 1 << 7 >> bit ? true : false;*/
-
-					break;
-				}
-
-				case Mode::BYTE:
-				{
-					decltype(dataBitStream)::size_type codeword = dataBitStream.size();
-
-					dataBitStream.resize(dataBitStream.size() + (get<2>(range) - get<1>(range)) * 8);
-
-					for (auto i = get<1>(range); i < get<2>(range); ++i, codeword += 8)
-						for (decltype(result)::size_type bit = 8; bit--;)
-							dataBitStream.at(codeword + bit) = message[i] & 1 << 7 >> bit ? true : false;
-
-					break;
-				}
-			}
-		}
-
-		if (dataBitStream.size() <= dataModuleCount)
-		{
-			dataBitStream.insert(dataBitStream.end(), terminator.begin(), terminator.begin() + std::min(dataModuleCount - dataBitStream.size(), terminator.size()));
-
-			if (dataBitStream.size() < dataModuleCount && dataBitStream.size() % 8)
-			{
-				dataBitStream.resize(dataBitStream.size() - dataBitStream.size() % 8 + 8);
-				
-				//If I got past the limit after resizing to an 8 bit boundary, then it must be because of the 4 bit codeword in M1 or M3 symbols
-				if (dataBitStream.size() > dataModuleCount)
-					dataBitStream.resize(dataModuleCount);
-			}
-
-			if (dataBitStream.size() < dataModuleCount)
-			{
-				vector<vector<bool>> padCodewords;
-				decltype(padCodewords)::size_type counter = 0;
-
-				if (type == SymbolType::MICRO_QR && (version.mVersion == 1 || version.mVersion == 3))
-					padCodewords = { { 0, 0, 0, 0 } }; //Pad codeword for M1 and M3
+				//Feature 1
+				if (symbol[i][j] == consecutiveRowValue)
+					++consecutiveRowCounter;
 				else
-					padCodewords = { { 1, 1, 1, 0, 1, 1, 0, 0 }, { 0, 0, 0, 1, 0, 0, 0, 1 } };
-
-				while (dataBitStream.size() < dataModuleCount)
-					dataBitStream.insert(dataBitStream.end(), padCodewords[counter % padCodewords.size()].begin(), padCodewords[counter % padCodewords.size()].end()), ++counter;
-			}
-		}
-
-		std::sort(layouts.begin(), layouts.end(), [](const decltype(layouts)::value_type &lhs, const decltype(layouts)::value_type &rhs) -> bool { return std::get<1>(lhs) < std::get<1>(rhs); });
-		for (const auto &blockLayout : layouts)
-		{
-			decltype(dataBlocks)::value_type block(get<2>(blockLayout)), errorBlock;
-			auto &generatorPolynomial = GetGeneratorPolynomialCoefficientExponents(get<1>(blockLayout) - get<2>(blockLayout));
-			unsigned n = get<2>(blockLayout);
-
-			for (auto &codeword : block)
-				for (decltype(dataBitStream)::size_type i = codeword.size(); i--;)
-					codeword[i] = dataBitStream[bitIndex++];
-
-			errorBlock = block;
-			errorBlock.resize(get<1>(blockLayout));
-
-			while (n--)
-			{
-				auto current = errorBlock.front().to_ulong();
-
-				errorBlock.erase(errorBlock.begin());
-
-				if (current)
 				{
-					current = GetAlphaExponent(current);
-
-					for (unsigned i = 0; i < generatorPolynomial.size(); ++i)
-					{
-						auto exponentSum = current + generatorPolynomial[i];
-
-						if (exponentSum > 255)
-							exponentSum %= 255;
-
-						errorBlock[i] = errorBlock[i].to_ulong() ^ GetAlphaValue(exponentSum);
-					}
+					feature1Score += GetFeature1Points(consecutiveRowCounter);
+					consecutiveRowValue = symbol[i][j], consecutiveRowCounter = 1;
 				}
-			}
 
-			dataBlocks.resize(dataBlocks.size() + get<0>(blockLayout), block);
-			errorCorrectionBlocks.resize(errorCorrectionBlocks.size() + get<0>(blockLayout), errorBlock);
-		}
-
-		for (const auto &blocks : { dataBlocks, errorCorrectionBlocks })
-		{
-			auto maxLength = std::max_element(blocks.begin(), blocks.end(), [](const decltype(dataBlocks)::value_type &lhs, const decltype(dataBlocks)::value_type &rhs) { return lhs.size() < rhs.size(); })->size();
-
-			for (decltype(maxLength) codewordIndex = 0; codewordIndex < maxLength; ++codewordIndex)
-			{
-				for (const auto &block : blocks)
+				if (symbol[j][i] == consecutiveColumnValue)
+					++consecutiveColumnCounter;
+				else
 				{
-					if (codewordIndex < block.size())
-					{
-						for (int bitIndex = block[codewordIndex].size(); bitIndex;)
-						{
-							if (!mask[currentRow][currentColumn])
-								result[currentRow][currentColumn] = block[codewordIndex][--bitIndex];
-
-							if (currentColumn > 6 && currentColumn % 2 || currentColumn < 6 && !(currentColumn % 2))
-							{
-								if (!currentRow && delta != 1)
-									delta = 1, currentColumn -= 2;
-								else
-									if (currentRow == GetSymbolSize(type, version.mVersion) - 1 && delta != -1)
-										delta = -1, currentColumn -= 2;
-									else
-										currentRow += delta;
-
-								++currentColumn;
-
-								if (currentColumn == 6)
-									currentColumn = 5;
-							}
-							else
-								--currentColumn;
-						}
-					}
+					feature1Score += GetFeature1Points(consecutiveColumnCounter);
+					consecutiveColumnValue = symbol[j][i], consecutiveColumnCounter = 1;
 				}
+
+				//Feature 2
+				if (i < symbol.size() - 1 &&
+					j < symbol[i].size() - 1 &&
+					symbol[i][j] == symbol[i][j + 1] &&
+					symbol[i][j] == symbol[i + 1][j] &&
+					symbol[i][j] == symbol[i + 1][j + 1])
+					feature2Score += 3;
+
+				//Feature 3
+				if (symbol[i][j] == feature3Pattern[feature3Row])
+					++feature3Row;
+
+				if (symbol[j][i] == feature3Pattern[feature3Column])
+					++feature3Column;
+
+				if (feature3Column == feature3Pattern.size())
+				{
+					if (i + 4 < symbol.size() && !symbol[i + 1][j] && !symbol[i + 2][j] && !symbol[i + 3][j] && !symbol[i + 4][j] ||
+						i >= 10 && !symbol[i - 7][j] && !symbol[i - 8][j] && !symbol[i - 9][j] && !symbol[i - 10][j])
+						feature3Score += 40;
+
+					feature3Column = 0;
+				}
+
+				if (feature3Row == feature3Pattern.size())
+				{
+					if (j + 4 < symbol.size() && !symbol[i][j + 1] && !symbol[i][j + 2] && !symbol[i][j + 3] && !symbol[i][j + 4] ||
+						j >= 10 && !symbol[i][j - 7] && !symbol[i][j - 8] && !symbol[i][j - 9] && !symbol[i][j - 10])
+						feature3Score += 40;
+
+					feature3Row = 0;
+				}
+
+				//Feature 4
+				if (symbol[j][i])
+					++darkModules;
 			}
+
+			//Feature 1
+			//In case the row/column ended without breaking the chain of consecutive modules
+			feature1Score += GetFeature1Points(consecutiveRowCounter);
+			feature1Score += GetFeature1Points(consecutiveColumnCounter);
 		}
 
-		//Add quiet zone
-		for (auto &row : result)
+		percentage = static_cast<double>(darkModules) / static_cast<double>(totalModules) * 100.;
+		feature4Score = std::abs(percentage - 50) / 5 * 10;
+
+		return feature1Score + feature2Score + feature3Score + feature4Score;
+	}
+	else
+	{
+		unsigned darkRow = 0, darkColumn = 0;
+
+		//Start at 1 to avoid timing pattern
+		for (Symbol::size_type i = 1, sz = symbol.size(); i < sz; ++i)
 		{
-			row.insert(row.begin(), quietZoneWidth, false);
-			row.insert(row.end(), quietZoneWidth, false);
+			if (symbol[i][sz - 1])
+				++darkColumn;
+
+			if (symbol[sz - 1][i])
+				++darkRow;
 		}
 
-		for (unsigned i = 0; i < quietZoneWidth; ++i)
-		{
-			result.insert(result.begin(), std::vector<bool>(GetSymbolSize(type, version.mVersion) + quietZoneWidth * 2));
-			result.insert(result.end(), std::vector<bool>(GetSymbolSize(type, version.mVersion) + quietZoneWidth * 2));
-		}
-
-		return result;
+		return darkColumn <= darkRow ? darkColumn * 16 + darkRow : darkRow * 16 + darkColumn;
 	}
 }
 
-QR::Version operator""_L(std::uint64_t version)
+std::vector<std::vector<bool>> QR::Encode(std::string_view message, SymbolType type, std::uint8_t version, ErrorCorrectionLevel level, Mode mode)
 {
-	return QR::Version{ static_cast<std::uint8_t>(version), QR::ErrorCorrectionLevel::L };
-}
+	using std::vector; using std::tuple; using std::bitset; using std::get;
+	vector<vector<bool>> result(GetSymbolSize(type, version), vector<bool>(GetSymbolSize(type, version))), mask = GetDataRegionMask(type, version);
+	vector<Symbol> maskedSymbols;
+	vector<unsigned> maskedSymbolScores;
+	vector<bool> dataBitStream, terminator = GetTerminator(type, version);
+	vector<tuple<Mode, decltype(message)::size_type, decltype(message)::size_type>> modeRanges = { { mode, 0, message.size() } }; //<type, [from, to)>
+	BlockLayoutVector layouts = GetBlockLayout(type, version, level);
+	vector<vector<bitset<8>>> dataBlocks, errorCorrectionBlocks;
+	decltype(dataBitStream)::size_type bitIndex = 0;
+	int currentRow = GetSymbolSize(type, version) - 1, currentColumn = currentRow, delta = -1;
+	unsigned quietZoneWidth = type == SymbolType::MICRO_QR ? 2 : 4;
+	unsigned dataModuleCount = GetDataModuleCount(type, version) - GetRemainderBitCount(type, version) - GetErrorCorrectionCodewordCount(type, version, level) * 8;
+	std::uint8_t maskId;
 
-QR::Version operator""_M(std::uint64_t version)
-{
-	return QR::Version{ static_cast<std::uint8_t>(version), QR::ErrorCorrectionLevel::M };
-}
+	DrawFinderPattern(result, 0, 0);
+	if (type != SymbolType::MICRO_QR)
+	{
+		DrawFinderPattern(result, 0, GetSymbolSize(type, version) - 7);
+		DrawFinderPattern(result, GetSymbolSize(type, version) - 7, 0);
+		DrawAlignmentPatterns(result, version);
+	}
+	DrawTimingPatterns(result, type, version);
 
-QR::Version operator""_Q(std::uint64_t version)
-{
-	return QR::Version{ static_cast<std::uint8_t>(version), QR::ErrorCorrectionLevel::Q };
-}
+	//Encode data
+	for (const auto &range : modeRanges)
+	{
+		auto modeIndicator = GetModeIndicator(type, version, get<0>(range));
+		auto countIndicator = GetCharacterCountIndicator(type, version, mode, static_cast<std::uint16_t>(message.size()));
 
-QR::Version operator""_H(std::uint64_t version)
-{
-	return QR::Version{ static_cast<std::uint8_t>(version), QR::ErrorCorrectionLevel::H };
+		dataBitStream.insert(dataBitStream.end(), modeIndicator.begin(), modeIndicator.end());
+		dataBitStream.insert(dataBitStream.end(), countIndicator.begin(), countIndicator.end());
+
+		switch (get<0>(range))
+		{
+			case Mode::NUMERIC:
+			{
+				/*decltype(dataBitStream)::size_type codeword = dataBitStream.size(), newSize = (get<2>(range) - get<1>(range)) / 3 * 10;
+
+				if (auto remainder = (get<2>(range) - get<1>(range)) % 3)
+					newSize += remainder * 3 + 1;
+
+				dataBitStream.resize(dataBitStream.size() + newSize);
+
+				for (auto i = get<1>(range); i < get<2>(range); i += 3, codeword += 10)
+				{
+					std::uint16_t numberTriplet = message[i];
+
+					for (decltype(result)::size_type bit = 10; bit--;)
+						dataBitStream.at(codeword + bit) = message[i] & 1 << 7 >> bit;
+				}*/
+
+				break;
+			}
+
+			case Mode::BYTE:
+			{
+				decltype(dataBitStream)::size_type codeword = dataBitStream.size();
+
+				dataBitStream.resize(dataBitStream.size() + (get<2>(range) - get<1>(range)) * 8);
+
+				for (auto i = get<1>(range); i < get<2>(range); ++i, codeword += 8)
+					for (decltype(result)::size_type bit = 8; bit--;)
+						dataBitStream.at(codeword + bit) = message[i] & 1 << 7 >> bit ? true : false;
+
+				break;
+			}
+		}
+	}
+
+	//Add terminator and pad codewords
+	if (dataBitStream.size() <= dataModuleCount)
+	{
+		dataBitStream.insert(dataBitStream.end(), terminator.begin(), terminator.begin() + std::min(dataModuleCount - dataBitStream.size(), terminator.size()));
+
+		if (dataBitStream.size() < dataModuleCount && dataBitStream.size() % 8)
+		{
+			dataBitStream.resize(dataBitStream.size() - dataBitStream.size() % 8 + 8);
+
+			//If I got past the limit after resizing to an 8 bit boundary, then it must be because of the 4 bit codeword in M1 or M3 symbols
+			if (dataBitStream.size() > dataModuleCount)
+				dataBitStream.resize(dataModuleCount);
+		}
+
+		if (dataBitStream.size() < dataModuleCount)
+		{
+			vector<vector<bool>> padCodewords;
+			decltype(padCodewords)::size_type counter = 0;
+
+			if (type == SymbolType::MICRO_QR && (version == 1 || version == 3))
+				padCodewords = { { 0, 0, 0, 0 } }; //Pad codeword for M1 and M3
+			else
+				padCodewords = { { 1, 1, 1, 0, 1, 1, 0, 0 }, { 0, 0, 0, 1, 0, 0, 0, 1 } };
+
+			while (dataBitStream.size() < dataModuleCount)
+				dataBitStream.insert(dataBitStream.end(), padCodewords[counter % padCodewords.size()].begin(), padCodewords[counter % padCodewords.size()].end()), ++counter;
+		}
+	}
+
+	//Split bit stream into data blocks and generate the corresponding error correction blocks
+	std::sort(layouts.begin(), layouts.end(), [](const decltype(layouts)::value_type &lhs, const decltype(layouts)::value_type &rhs) -> bool { return get<1>(lhs) < get<1>(rhs); });
+	for (const auto &blockLayout : layouts)
+	{
+		decltype(dataBlocks)::value_type block(get<2>(blockLayout)), errorBlock;
+		auto &generatorPolynomial = GetPolynomialCoefficientExponents(get<1>(blockLayout) - get<2>(blockLayout));
+		unsigned n = get<2>(blockLayout);
+
+		for (auto &codeword : block)
+			for (decltype(dataBitStream)::size_type i = codeword.size(); i--;)
+				codeword[i] = dataBitStream[bitIndex++];
+
+		errorBlock = block;
+		errorBlock.resize(get<1>(blockLayout));
+
+		while (n--)
+		{
+			auto current = errorBlock.front().to_ulong();
+
+			errorBlock.erase(errorBlock.begin());
+
+			if (current)
+			{
+				current = GetAlphaExponent(current);
+
+				for (unsigned i = 0; i < generatorPolynomial.size(); ++i)
+				{
+					auto exponentSum = current + generatorPolynomial[i];
+
+					if (exponentSum > 255)
+						exponentSum %= 255;
+
+					errorBlock[i] = errorBlock[i].to_ulong() ^ GetAlphaValue(exponentSum);
+				}
+			}
+		}
+
+		dataBlocks.resize(dataBlocks.size() + get<0>(blockLayout), block);
+		errorCorrectionBlocks.resize(errorCorrectionBlocks.size() + get<0>(blockLayout), errorBlock);
+	}
+
+	//Place bits in symbol
+	for (const auto &blocks : { dataBlocks, errorCorrectionBlocks })
+	{
+		auto maxLength = std::max_element(blocks.begin(), blocks.end(), [](const decltype(dataBlocks)::value_type &lhs, const decltype(dataBlocks)::value_type &rhs) { return lhs.size() < rhs.size(); })->size();
+
+		for (decltype(maxLength) codewordIndex = 0; codewordIndex < maxLength; ++codewordIndex)
+		{
+			for (const auto &block : blocks)
+			{
+				if (codewordIndex < block.size())
+				{
+					for (int bitIndex = block[codewordIndex].size(); bitIndex;)
+					{
+						if (!mask[currentRow][currentColumn])
+							result[currentRow][currentColumn] = block[codewordIndex][--bitIndex];
+
+						if (currentColumn > 6 && currentColumn % 2 || currentColumn < 6 && !(currentColumn % 2))
+						{
+							if (!currentRow && delta != 1)
+								delta = 1, currentColumn -= 2;
+							else
+								if (currentRow == GetSymbolSize(type, version) - 1 && delta != -1)
+									delta = -1, currentColumn -= 2;
+								else
+									currentRow += delta;
+
+							++currentColumn;
+
+							if (currentColumn == 6 && type != SymbolType::MICRO_QR)
+								currentColumn = 5;
+						}
+						else
+							--currentColumn;
+					}
+				}
+			}
+		}
+	}
+
+	for (unsigned maskId = 0, sz = type == SymbolType::MICRO_QR ? 4 : 8; maskId < sz; ++maskId)
+	{
+		maskedSymbols.push_back(result);
+
+		for (Symbol::size_type i = 0, sz = maskedSymbols.back().size(); i < sz; ++i)
+			for (Symbol::value_type::size_type j = 0, sz = maskedSymbols.back()[i].size(); j < sz; ++j)
+				if (!mask[i][j])
+					maskedSymbols.back()[i][j] = maskedSymbols.back()[i][j] ^ GetMaskBit(type, maskId, i, j);
+
+		maskedSymbolScores.push_back(GetSymbolRating(maskedSymbols.back(), type));
+	}
+
+	if (type == SymbolType::QR)
+		maskId = std::min_element(maskedSymbolScores.begin(), maskedSymbolScores.end()) - maskedSymbolScores.begin();
+	else
+		maskId = std::max_element(maskedSymbolScores.begin(), maskedSymbolScores.end()) - maskedSymbolScores.begin();
+
+	result = maskedSymbols[maskId];
+
+	DrawFormatInformation(result, type, version, level, maskId);
+	if (version >= 7)
+		DrawVersionInformation(result, type, version);
+
+	//Add quiet zone
+	for (auto &row : result)
+	{
+		row.insert(row.begin(), quietZoneWidth, false);
+		row.insert(row.end(), quietZoneWidth, false);
+	}
+
+	for (unsigned i = 0; i < quietZoneWidth; ++i)
+	{
+		result.insert(result.begin(), std::vector<bool>(GetSymbolSize(type, version) + quietZoneWidth * 2));
+		result.insert(result.end(), std::vector<bool>(GetSymbolSize(type, version) + quietZoneWidth * 2));
+	}
+
+	return result;
 }

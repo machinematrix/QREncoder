@@ -1,7 +1,7 @@
-#include <windows.h>
 #include <fstream>
-#include <array>
+#include <iostream>
 #include <vector>
+#include <map>
 #include <regex>
 #include "Image.h"
 #include "QRCode.h"
@@ -29,15 +29,80 @@ BMPImage QRToBMP(const std::vector<std::vector<bool>> &code, unsigned multiplier
 	return result;
 }
 
-int main()
+int main(int argc, char **argv)
 {
-	std::ofstream output("image.bmp", std::ios_base::binary);
+	using std::cout;
+	using std::cerr;
+	using std::endl;
+	int result = 0;
 
-	if (output.is_open())
+	if (argc == 4)
 	{
-		BMPImage image = QRToBMP(QR::Encode("HELLO WORLD", QR::SymbolType::QR, 2_Q, QR::Mode::BYTE), 1);
-		output << image;
+		std::ofstream output;
+		std::regex versionFormat("(M)?([[:digit:]]{1,2})-([LMQH])");
+		std::cmatch results;
+
+		if (std::regex_match(argv[2], results, versionFormat))
+		{
+			QR::SymbolType type = results[1].matched ? QR::SymbolType::MICRO_QR : QR::SymbolType::QR;
+			std::uint8_t version = std::stoul(results[2]);
+			QR::ErrorCorrectionLevel level{};
+
+			switch (results[3].str().front())
+			{
+				case 'L':
+					level = QR::ErrorCorrectionLevel::L;
+					break;
+
+				case 'M':
+					level = QR::ErrorCorrectionLevel::M;
+					break;
+
+				case 'Q':
+					level = QR::ErrorCorrectionLevel::Q;
+					break;
+
+				case 'H':
+					level = QR::ErrorCorrectionLevel::H;
+					break;
+			}
+
+			output.open(argv[3], std::ios_base::binary);
+
+			if (output.is_open())
+				output << QRToBMP(QR::Encode(argv[1], type, version, level, QR::Mode::BYTE), 1);
+			else
+			{
+				cerr << "Could not open file" << endl;
+				result = -1;
+			}
+		}
+		else
+			if (std::string_view(argv[2]) == "M1")
+			{
+				std::ofstream output(argv[3], std::ios_base::binary);
+
+				if (output.is_open())
+					output << QRToBMP(QR::Encode(argv[1], QR::SymbolType::MICRO_QR, 1, QR::ErrorCorrectionLevel::ERROR_DETECTION_ONLY, QR::Mode::BYTE), 1);
+				else
+				{
+					cerr << "Could not open file" << endl;
+					result = -1;
+				}
+			}
+			else
+			{
+				cerr << "Invalid version" << endl;
+				result = -1;
+			}
+	}
+	else
+	{
+		cout	<< "Usage: " << argv[0] << " message [M]V-E output_file\n"
+				<< "M: Indicates that the output will be a Micro QR symbol\n"
+				<< "V: Indicates version number. Max is 40 for QR symbols and 4 for Micro QR symbols\n"
+				<< "E: Error correction levels. Valid values are L, M, Q, H" << endl;
 	}
 
-	return 0;
+	return result;
 }

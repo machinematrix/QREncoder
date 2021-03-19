@@ -6,20 +6,10 @@
 namespace QR
 {
 	enum class SymbolType : std::uint8_t { QR, MICRO_QR };
-	enum class ErrorCorrectionLevel : std::uint8_t { L, M, Q, H, NONE };
+	enum class ErrorCorrectionLevel : std::uint8_t { L, M, Q, H, ERROR_DETECTION_ONLY };
 	enum class Mode : std::uint8_t { NUMERIC, ALPHANUMERIC, BYTE, KANJI };
-	struct Version
-	{
-		std::uint8_t mVersion;
-		ErrorCorrectionLevel mLevel;
-	};
 
-	std::vector<std::vector<bool>> Encode(std::string_view message, SymbolType type, Version version, Mode mode);
+	std::vector<std::vector<bool>> Encode(std::string_view message, SymbolType type, std::uint8_t version, ErrorCorrectionLevel mLevel, Mode mode);
 }
-
-QR::Version operator""_L(std::uint64_t);
-QR::Version operator""_M(std::uint64_t);
-QR::Version operator""_Q(std::uint64_t);
-QR::Version operator""_H(std::uint64_t);
 
 #endif
