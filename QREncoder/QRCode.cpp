@@ -2,6 +2,7 @@
 #include <stdexcept>
 #include <array>
 #include <unordered_map>
+#include <string>
 #include <tuple>
 #include <bitset>
 #include <algorithm>
@@ -982,7 +983,7 @@ std::vector<std::vector<bool>> QR::Encode(std::string_view message, SymbolType t
 	for (const auto &range : modeRanges)
 	{
 		auto modeIndicator = GetModeIndicator(type, version, get<0>(range));
-		auto countIndicator = GetCharacterCountIndicator(type, version, mode, static_cast<std::uint16_t>(message.size()));
+		auto countIndicator = GetCharacterCountIndicator(type, version, mode, (get<2>(range) - get<1>(range)));
 
 		dataBitStream.insert(dataBitStream.end(), modeIndicator.begin(), modeIndicator.end());
 		dataBitStream.insert(dataBitStream.end(), countIndicator.begin(), countIndicator.end());
@@ -991,20 +992,30 @@ std::vector<std::vector<bool>> QR::Encode(std::string_view message, SymbolType t
 		{
 			case Mode::NUMERIC:
 			{
-				/*decltype(dataBitStream)::size_type codeword = dataBitStream.size(), newSize = (get<2>(range) - get<1>(range)) / 3 * 10;
+				decltype(dataBitStream)::size_type codeword = dataBitStream.size(), newSize = (get<2>(range) - get<1>(range)) / 3 * 10;
+				auto remainder = (get<2>(range) - get<1>(range)) % 3;
 
-				if (auto remainder = (get<2>(range) - get<1>(range)) % 3)
+				if (remainder)
 					newSize += remainder * 3 + 1;
 
 				dataBitStream.resize(dataBitStream.size() + newSize);
 
-				for (auto i = get<1>(range); i < get<2>(range); i += 3, codeword += 10)
+				for (auto i = get<1>(range); i < get<2>(range) - 3; i += 3, codeword += 10)
 				{
-					std::uint16_t numberTriplet = message[i];
+					unsigned numberTriplet = std::stoul(std::string(message.data() + i, message.data() + i + 3));
 
 					for (decltype(result)::size_type bit = 10; bit--;)
-						dataBitStream.at(codeword + bit) = message[i] & 1 << 7 >> bit;
-				}*/
+						dataBitStream[codeword + bit] = numberTriplet & 1 << 9 >> bit;
+				}
+
+				if (remainder)
+				{
+					unsigned remainderBits = remainder * 3 + 1;
+					unsigned encodedRemainder = std::stoul(std::string(message.data() + get<2>(range) - remainder, get<2>(range)));
+
+					for (decltype(result)::size_type bit = remainderBits; bit--;)
+						dataBitStream[dataBitStream.size() - remainderBits + bit] = encodedRemainder & 1 << remainderBits - 1 >> bit;
+				}
 
 				break;
 			}
@@ -1017,7 +1028,7 @@ std::vector<std::vector<bool>> QR::Encode(std::string_view message, SymbolType t
 
 				for (auto i = get<1>(range); i < get<2>(range); ++i, codeword += 8)
 					for (decltype(result)::size_type bit = 8; bit--;)
-						dataBitStream.at(codeword + bit) = message[i] & 1 << 7 >> bit ? true : false;
+						dataBitStream[codeword + bit] = message[i] & 1 << 7 >> bit;
 
 				break;
 			}
