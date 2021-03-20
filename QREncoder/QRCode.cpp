@@ -2,11 +2,13 @@
 #include <stdexcept>
 #include <array>
 #include <unordered_map>
+#include <unordered_set>
 #include <string>
 #include <tuple>
 #include <bitset>
 #include <algorithm>
 #include <charconv>
+#include <optional>
 #include <cmath>
 
 namespace QR
@@ -880,6 +882,34 @@ namespace QR
 			}
 		}
 
+		//From figure H.1, page 93
+		bool IsKanji(std::uint8_t leadingByte, std::uint8_t trailerByte)
+		{
+			return (leadingByte == 0x81 || leadingByte == 0x9F || leadingByte == 0xE0 || leadingByte == 0xEA)
+				&& (trailerByte >= 0x40 && trailerByte <= 0x7E || trailerByte >= 0x80 && trailerByte <= 0xFC)
+				|| leadingByte == 0xEB && (trailerByte >= 0x40 && trailerByte <= 0x7E || trailerByte >= 0x80 && trailerByte <= 0xBF);
+		}
+
+		//Returns the most compact Mode in which the character can be encoded in.
+		Mode GetMinimalMode(std::uint8_t leadingByte, std::optional<std::uint8_t> trailerByte)
+		{
+			static const std::unordered_set<std::uint8_t> characters = { ' ', '$', '%', '*', '+', '-', '.', '/', ':' };
+			Mode result;
+
+			if (leadingByte >= '0' && leadingByte <= '9')
+				result = Mode::NUMERIC;
+			else
+				if (std::isalpha(leadingByte) || characters.count(leadingByte))
+					result = Mode::ALPHANUMERIC;
+				else
+					if (trailerByte.has_value() && IsKanji(leadingByte, trailerByte.value()))
+						result = Mode::KANJI;
+					else
+						result = Mode::BYTE;
+
+			return result;
+		}
+
 		void DrawFinderPattern(Symbol &symbol, Symbol::size_type startingRow, Symbol::size_type startingColumn)
 		{
 			for (decltype(startingRow) i = startingRow; i < startingRow + 7; ++i)
@@ -1000,14 +1030,13 @@ namespace QR
 	#endif
 }
 
-std::vector<std::vector<bool>> QR::Encode(std::string_view message, SymbolType type, std::uint8_t version, ErrorCorrectionLevel level, Mode mode)
+std::vector<std::vector<bool>> QR::Encode(std::string_view message, SymbolType type, std::uint8_t version, ErrorCorrectionLevel level, const std::vector<ModeRange> &modes)
 {
 	using std::vector; using std::tuple; using std::bitset; using std::get;
 	vector<vector<bool>> result(GetSymbolSize(type, version), vector<bool>(GetSymbolSize(type, version))), mask = GetDataRegionMask(type, version);
 	vector<Symbol> maskedSymbols;
 	vector<unsigned> maskedSymbolScores;
 	vector<bool> dataBitStream;
-	vector<tuple<Mode, decltype(message)::size_type, decltype(message)::size_type>> modeRanges = { { mode, 0, message.size() } }; //<type, [from, to)>
 	BlockLayoutVector layouts = GetBlockLayout(type, version, level);
 	vector<vector<bitset<8>>> dataBlocks, errorCorrectionBlocks;
 	decltype(dataBitStream)::size_type bitIndex = 0;
@@ -1026,7 +1055,7 @@ std::vector<std::vector<bool>> QR::Encode(std::string_view message, SymbolType t
 	DrawTimingPatterns(result, type, version);
 
 	//Encode data
-	for (const auto &range : modeRanges)
+	for (const auto &range : modes)
 	{
 		auto modeIndicator = GetModeIndicator(type, version, get<0>(range));
 
@@ -1036,7 +1065,7 @@ std::vector<std::vector<bool>> QR::Encode(std::string_view message, SymbolType t
 		{
 			case Mode::NUMERIC:
 			{
-				auto countIndicator = GetCharacterCountIndicator(type, version, mode, get<2>(range) - get<1>(range));
+				auto countIndicator = GetCharacterCountIndicator(type, version, get<0>(range), get<2>(range) - get<1>(range));
 				decltype(dataBitStream)::size_type codeword;
 				auto characterCount = get<2>(range) - get<1>(range);
 
@@ -1070,7 +1099,7 @@ std::vector<std::vector<bool>> QR::Encode(std::string_view message, SymbolType t
 
 			case Mode::ALPHANUMERIC:
 			{
-				auto countIndicator = GetCharacterCountIndicator(type, version, mode, get<2>(range) - get<1>(range));
+				auto countIndicator = GetCharacterCountIndicator(type, version, get<0>(range), get<2>(range) - get<1>(range));
 				decltype(dataBitStream)::size_type characterOffset;
 				auto characterCount = get<2>(range) - get<1>(range);
 
@@ -1102,7 +1131,7 @@ std::vector<std::vector<bool>> QR::Encode(std::string_view message, SymbolType t
 
 			case Mode::BYTE:
 			{
-				auto countIndicator = GetCharacterCountIndicator(type, version, mode, get<2>(range) - get<1>(range));
+				auto countIndicator = GetCharacterCountIndicator(type, version, get<0>(range), get<2>(range) - get<1>(range));
 				decltype(dataBitStream)::size_type codeword;
 
 				dataBitStream.insert(dataBitStream.end(), countIndicator.begin(), countIndicator.end());
@@ -1118,7 +1147,7 @@ std::vector<std::vector<bool>> QR::Encode(std::string_view message, SymbolType t
 
 			case Mode::KANJI:
 			{
-				auto countIndicator = GetCharacterCountIndicator(type, version, mode, (get<2>(range) - get<1>(range)) / 2);
+				auto countIndicator = GetCharacterCountIndicator(type, version, get<0>(range), (get<2>(range) - get<1>(range)) / 2);
 
 				dataBitStream.insert(dataBitStream.end(), countIndicator.begin(), countIndicator.end());
 
@@ -1129,9 +1158,7 @@ std::vector<std::vector<bool>> QR::Encode(std::string_view message, SymbolType t
 
 				for (auto i = get<1>(range); i < characterCount; i += 2, codeword += 13)
 				{
-					std::uint16_t kanjiCharacter = static_cast<std::uint8_t>(message[i + 1]);// = static_cast<std::uint16_t>(message[i + 1]) << 8 | static_cast<std::uint16_t>(message[i]);
-					kanjiCharacter <<= 8;
-					kanjiCharacter |= static_cast<uint8_t>(message[i]);
+					std::uint16_t kanjiCharacter = *reinterpret_cast<const std::uint16_t*>(message.data() + i);
 
 					if (kanjiCharacter >= 0x8140 && kanjiCharacter <= 0x9FFC)
 						kanjiCharacter -= 0x8140;
@@ -1300,4 +1327,9 @@ std::vector<std::vector<bool>> QR::Encode(std::string_view message, SymbolType t
 	}
 
 	return result;
+}
+
+std::vector<std::vector<bool>> QR::Encode(std::string_view message, SymbolType type, std::uint8_t version, ErrorCorrectionLevel level, Mode mode)
+{
+	return Encode(message, type, version, level, { { mode, 0, message.size() } });
 }
