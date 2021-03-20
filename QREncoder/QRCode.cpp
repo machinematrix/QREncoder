@@ -1029,18 +1029,19 @@ std::vector<std::vector<bool>> QR::Encode(std::string_view message, SymbolType t
 	for (const auto &range : modeRanges)
 	{
 		auto modeIndicator = GetModeIndicator(type, version, get<0>(range));
-		auto countIndicator = GetCharacterCountIndicator(type, version, mode, (get<2>(range) - get<1>(range)));
 
 		dataBitStream.insert(dataBitStream.end(), modeIndicator.begin(), modeIndicator.end());
-		dataBitStream.insert(dataBitStream.end(), countIndicator.begin(), countIndicator.end());
 
 		switch (get<0>(range))
 		{
 			case Mode::NUMERIC:
 			{
-				decltype(dataBitStream)::size_type codeword = dataBitStream.size();
+				auto countIndicator = GetCharacterCountIndicator(type, version, mode, get<2>(range) - get<1>(range));
+				decltype(dataBitStream)::size_type codeword;
 				auto characterCount = get<2>(range) - get<1>(range);
 
+				dataBitStream.insert(dataBitStream.end(), countIndicator.begin(), countIndicator.end());
+				codeword = dataBitStream.size();
 				dataBitStream.resize(dataBitStream.size() + characterCount / 3 * 10 + (characterCount % 3 ? characterCount % 3 * 3 + 1 : 0));
 
 				if (characterCount / 3)
@@ -1069,9 +1070,12 @@ std::vector<std::vector<bool>> QR::Encode(std::string_view message, SymbolType t
 
 			case Mode::ALPHANUMERIC:
 			{
-				decltype(dataBitStream)::size_type characterOffset = dataBitStream.size();
+				auto countIndicator = GetCharacterCountIndicator(type, version, mode, get<2>(range) - get<1>(range));
+				decltype(dataBitStream)::size_type characterOffset;
 				auto characterCount = get<2>(range) - get<1>(range);
 
+				dataBitStream.insert(dataBitStream.end(), countIndicator.begin(), countIndicator.end());
+				characterOffset = dataBitStream.size();
 				dataBitStream.resize(dataBitStream.size() + characterCount / 2 * 11 + characterCount % 2 * 6);
 				
 				if (characterCount / 2)
@@ -1098,13 +1102,48 @@ std::vector<std::vector<bool>> QR::Encode(std::string_view message, SymbolType t
 
 			case Mode::BYTE:
 			{
-				decltype(dataBitStream)::size_type codeword = dataBitStream.size();
+				auto countIndicator = GetCharacterCountIndicator(type, version, mode, get<2>(range) - get<1>(range));
+				decltype(dataBitStream)::size_type codeword;
 
+				dataBitStream.insert(dataBitStream.end(), countIndicator.begin(), countIndicator.end());
+				codeword = dataBitStream.size();
 				dataBitStream.resize(dataBitStream.size() + (get<2>(range) - get<1>(range)) * 8);
 
 				for (auto i = get<1>(range); i < get<2>(range); ++i, codeword += 8)
 					for (decltype(result)::size_type bit = 8; bit--;)
 						dataBitStream[codeword + bit] = message[i] & 1 << 7 >> bit;
+
+				break;
+			}
+
+			case Mode::KANJI:
+			{
+				auto countIndicator = GetCharacterCountIndicator(type, version, mode, (get<2>(range) - get<1>(range)) / 2);
+
+				dataBitStream.insert(dataBitStream.end(), countIndicator.begin(), countIndicator.end());
+
+				decltype(dataBitStream)::size_type codeword = dataBitStream.size();
+				auto characterCount = get<2>(range) - get<1>(range);
+
+				dataBitStream.resize(dataBitStream.size() + characterCount / 2 * 13);
+
+				for (auto i = get<1>(range); i < characterCount; i += 2, codeword += 13)
+				{
+					std::uint16_t kanjiCharacter = static_cast<std::uint8_t>(message[i + 1]);// = static_cast<std::uint16_t>(message[i + 1]) << 8 | static_cast<std::uint16_t>(message[i]);
+					kanjiCharacter <<= 8;
+					kanjiCharacter |= static_cast<uint8_t>(message[i]);
+
+					if (kanjiCharacter >= 0x8140 && kanjiCharacter <= 0x9FFC)
+						kanjiCharacter -= 0x8140;
+					else
+						if (kanjiCharacter >= 0xE040 && kanjiCharacter <= 0xEBBF)
+							kanjiCharacter -= 0xC140;
+
+					kanjiCharacter = (kanjiCharacter >> 8) * 0xC0 + (kanjiCharacter & 0xFF);
+
+					for (decltype(result)::size_type bit = 0; bit < 13; ++bit)
+						dataBitStream[codeword + bit] = kanjiCharacter & 1 << 12 >> bit;
+				}
 
 				break;
 			}

@@ -1,7 +1,7 @@
-#include <fstream>
+﻿#include <fstream>
 #include <iostream>
 #include <vector>
-#include <map>
+#include <unordered_map>
 #include <regex>
 #include "Image.h"
 #include "QRCode.h"
@@ -44,33 +44,19 @@ int main(int argc, char **argv)
 
 		if (std::regex_match(argv[2], results, versionFormat))
 		{
+			std::unordered_map<char, QR::ErrorCorrectionLevel> levels = {
+				{ 'L', QR::ErrorCorrectionLevel::L },
+				{ 'M', QR::ErrorCorrectionLevel::M },
+				{ 'Q', QR::ErrorCorrectionLevel::Q },
+				{ 'H', QR::ErrorCorrectionLevel::H }
+			};
 			QR::SymbolType type = results[1].matched ? QR::SymbolType::MICRO_QR : QR::SymbolType::QR;
 			std::uint8_t version = std::stoul(results[2]);
-			QR::ErrorCorrectionLevel level{};
-
-			switch (results[3].str().front())
-			{
-				case 'L':
-					level = QR::ErrorCorrectionLevel::L;
-					break;
-
-				case 'M':
-					level = QR::ErrorCorrectionLevel::M;
-					break;
-
-				case 'Q':
-					level = QR::ErrorCorrectionLevel::Q;
-					break;
-
-				case 'H':
-					level = QR::ErrorCorrectionLevel::H;
-					break;
-			}
 
 			output.open(argv[3], std::ios_base::binary);
 
 			if (output.is_open())
-				output << QRToBMP(QR::Encode(argv[1], type, version, level, QR::Mode::BYTE), 8);
+				output << QRToBMP(QR::Encode(argv[1], type, version, levels.at(results[3].str().front()), QR::Mode::BYTE), 8);
 			else
 			{
 				cerr << "Could not open file" << endl;
