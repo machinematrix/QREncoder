@@ -514,7 +514,7 @@ namespace QR
 
 			result.resize(length);
 
-			for (decltype(result)::size_type i = result.size(); i--;)
+			for (decltype(result)::size_type i = 0; i < result.size(); ++i)
 				result.at(i) = characterCount & 1 << (length - 1) >> i ? true : false;
 
 			return result;
