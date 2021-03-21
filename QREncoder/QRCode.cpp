@@ -339,29 +339,6 @@ namespace QR
 			return result;
 		}
 
-		unsigned GetCharacterCountIndicatorLength(Mode mode, SymbolType type, std::uint8_t version)
-		{
-			using TableType = std::array<std::array<unsigned, 4>, 4>;
-			static const TableType microModeLengths = { { { 3 }, { 4, 3 }, { 5, 4, 4, 3 }, { 6, 5, 5, 4 } } };
-			static const TableType modeLengths = { { { 10, 9, 8, 8 }, { 12, 11, 16, 10 }, { 14, 13, 16, 12 } } };
-			unsigned result = 0;
-
-			if (type == SymbolType::MICRO_QR)
-				result = microModeLengths[version][static_cast<size_t>(mode)];
-			else
-			{
-				if (version <= 9)
-					result = modeLengths[0][static_cast<size_t>(mode)];
-				else
-					if (version <= 26)
-						result = modeLengths[1][static_cast<size_t>(mode)];
-					else
-						result = modeLengths[2][static_cast<size_t>(mode)];
-			}
-
-			return result;
-		}
-
 		//version parameter is only used for Micro QR
 		std::vector<bool> GetTerminator(SymbolType type, std::uint8_t version)
 		{
