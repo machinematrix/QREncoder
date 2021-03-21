@@ -115,7 +115,20 @@ int main(int argc, char **argv)
 		return -1;
 	}
 
-	output << QRToBMP(QR::Encode(message, type.value(), version.value(), level.value(), modeRanges), 4);
+	try
+	{
+		output << QRToBMP(QR::Encode(message, type.value(), version.value(), level.value(), modeRanges), 4);
+	}
+	catch (const std::length_error &e)
+	{
+		cerr << e.what() << endl;
+		return -1;
+	}
+	catch (const std::invalid_argument &e)
+	{
+		cerr << e.what() << endl;
+		return -1;
+	}
 
 	return 0;
 }

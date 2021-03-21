@@ -222,6 +222,9 @@ namespace QR
 			} };
 			vector<tuple<unsigned, unsigned, unsigned>> result;
 
+			if (level == ErrorCorrectionLevel::ERROR_DETECTION_ONLY)
+				level = ErrorCorrectionLevel::L;
+
 			if (type == SymbolType::MICRO_QR)
 				result = { microBlockLayouts[version - 1][static_cast<decltype(microBlockLayouts)::size_type>(level)] };
 			else
@@ -1002,6 +1005,35 @@ namespace QR
 			}
 		}
 
+		void ValidateArguments(SymbolType type, std::uint8_t version, ErrorCorrectionLevel level, const std::vector<ModeRange> &modes)
+		{
+			if (type == SymbolType::MICRO_QR)
+			{
+				if (version > 4)
+					throw std::invalid_argument("Max version for Micro QR symbols is 4");
+
+				if (version == 1 && level != ErrorCorrectionLevel::ERROR_DETECTION_ONLY)
+					throw std::invalid_argument("M1 symbols don't support error correction");
+
+				if (version != 1 && level == ErrorCorrectionLevel::ERROR_DETECTION_ONLY)
+					throw std::invalid_argument("ERROR_DETECTION_ONLY is only for M1 symbols");
+
+				if (level == ErrorCorrectionLevel::Q && version != 4)
+					throw std::invalid_argument("Level Q error correction in Micro QR symbols is only supported in version 4");
+
+				if (level == ErrorCorrectionLevel::H)
+					throw std::invalid_argument("Level H error correction is not supported in Micro QR symbols");
+			}
+			else if (type == SymbolType::QR)
+			{
+				if (version > 40)
+					throw std::invalid_argument("Max version for QR symbols is 40");
+
+				if (level == ErrorCorrectionLevel::ERROR_DETECTION_ONLY)
+					throw std::invalid_argument("ERROR_DETECTION_ONLY is only for M1 symbols");
+			}
+		}
+
 		#ifdef NDEBUG
 	}
 	#endif
@@ -1010,6 +1042,9 @@ namespace QR
 std::vector<std::vector<bool>> QR::Encode(std::string_view message, SymbolType type, std::uint8_t version, ErrorCorrectionLevel level, const std::vector<ModeRange> &modes)
 {
 	using std::vector; using std::tuple; using std::bitset; using std::get;
+
+	ValidateArguments(type, version, level, modes);
+
 	vector<vector<bool>> result(GetSymbolSize(type, version), vector<bool>(GetSymbolSize(type, version))), mask = GetDataRegionMask(type, version);
 	vector<Symbol> maskedSymbols;
 	vector<unsigned> maskedSymbolScores;
@@ -1184,6 +1219,8 @@ std::vector<std::vector<bool>> QR::Encode(std::string_view message, SymbolType t
 				dataBitStream.insert(dataBitStream.end(), padCodewords[counter % padCodewords.size()].begin(), padCodewords[counter % padCodewords.size()].end()), ++counter;
 		}
 	}
+	else
+		throw std::length_error("Message exceeds symbol capacity");
 
 	//Split bit stream into data blocks and generate the corresponding error correction blocks
 	std::sort(layouts.begin(), layouts.end(), [](const decltype(layouts)::value_type &lhs, const decltype(layouts)::value_type &rhs) -> bool { return get<1>(lhs) < get<1>(rhs); });
@@ -1194,8 +1231,15 @@ std::vector<std::vector<bool>> QR::Encode(std::string_view message, SymbolType t
 		unsigned n = get<2>(blockLayout);
 
 		for (auto &codeword : block)
-			for (decltype(dataBitStream)::size_type i = codeword.size(); i--;)
+		{
+			decltype(dataBitStream)::size_type startingBit = codeword.size();
+
+			if (type == SymbolType::MICRO_QR && (version == 1 || version == 3) && &codeword == &block.back())
+				startingBit = 4;
+
+			for (decltype(dataBitStream)::size_type i = startingBit; i--;)
 				codeword[i] = dataBitStream[bitIndex++];
+		}
 
 		errorBlock = block;
 		errorBlock.resize(get<1>(blockLayout));
@@ -1227,7 +1271,7 @@ std::vector<std::vector<bool>> QR::Encode(std::string_view message, SymbolType t
 	}
 
 	//Place bits in symbol
-	for (const auto &blocks : { dataBlocks, errorCorrectionBlocks })
+	for (const decltype(dataBlocks) &blocks : { std::ref(dataBlocks), std::ref(errorCorrectionBlocks) })
 	{
 		auto maxLength = std::max_element(blocks.begin(), blocks.end(), [](const decltype(dataBlocks)::value_type &lhs, const decltype(dataBlocks)::value_type &rhs) { return lhs.size() < rhs.size(); })->size();
 
@@ -1237,7 +1281,12 @@ std::vector<std::vector<bool>> QR::Encode(std::string_view message, SymbolType t
 			{
 				if (codewordIndex < block.size())
 				{
-					for (int bitIndex = block[codewordIndex].size(); bitIndex;)
+					int startingBit = block[codewordIndex].size();
+
+					if (type == SymbolType::MICRO_QR && (version == 1 || version == 3) && &block[codewordIndex] == &block.back() && &blocks == &dataBlocks)
+						startingBit = 4;
+
+					for (int bitIndex = startingBit; bitIndex;)
 					{
 						if (!mask[currentRow][currentColumn])
 							result[currentRow][currentColumn] = block[codewordIndex][--bitIndex];
