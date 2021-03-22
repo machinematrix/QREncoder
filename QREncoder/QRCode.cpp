@@ -644,7 +644,7 @@ namespace QR
 
 		std::uint8_t GetAlphanumericCode(std::uint8_t asciiCharacter)
 		{
-			std::uint8_t result = 45;
+			std::uint8_t result = 0;
 
 			if (std::isdigit(asciiCharacter))
 				result = asciiCharacter - '0';
@@ -684,6 +684,8 @@ namespace QR
 						case ':':
 							result = 44;
 							break;
+						default:
+							throw std::invalid_argument("Character " + std::string(1, asciiCharacter) + " can't be encoded in alphanumeric mode");
 					}
 
 			return result;
@@ -1005,12 +1007,15 @@ namespace QR
 			}
 		}
 
-		void ValidateArguments(SymbolType type, std::uint8_t version, ErrorCorrectionLevel level, const std::vector<ModeRange> &modes)
+		void ValidateArguments(SymbolType type, std::uint8_t version, ErrorCorrectionLevel level)
 		{
+			if (!version)
+				throw std::invalid_argument("Minimum version for QR and Micro QR symbols is 1");
+
 			if (type == SymbolType::MICRO_QR)
 			{
 				if (version > 4)
-					throw std::invalid_argument("Max version for Micro QR symbols is 4");
+					throw std::invalid_argument("Max version for Micro QR symbols is M4");
 
 				if (version == 1 && level != ErrorCorrectionLevel::ERROR_DETECTION_ONLY)
 					throw std::invalid_argument("M1 symbols don't support error correction");
@@ -1019,7 +1024,7 @@ namespace QR
 					throw std::invalid_argument("ERROR_DETECTION_ONLY is only for M1 symbols");
 
 				if (level == ErrorCorrectionLevel::Q && version != 4)
-					throw std::invalid_argument("Level Q error correction in Micro QR symbols is only supported in version 4");
+					throw std::invalid_argument("Level Q error correction in Micro QR symbols is only supported in version M4");
 
 				if (level == ErrorCorrectionLevel::H)
 					throw std::invalid_argument("Level H error correction is not supported in Micro QR symbols");
@@ -1043,7 +1048,7 @@ std::vector<std::vector<bool>> QR::Encode(std::string_view message, SymbolType t
 {
 	using std::vector; using std::tuple; using std::bitset; using std::get;
 
-	ValidateArguments(type, version, level, modes);
+	ValidateArguments(type, version, level);
 
 	vector<vector<bool>> result(GetSymbolSize(type, version), vector<bool>(GetSymbolSize(type, version))), mask = GetDataRegionMask(type, version);
 	vector<Symbol> maskedSymbols;
@@ -1090,6 +1095,11 @@ std::vector<std::vector<bool>> QR::Encode(std::string_view message, SymbolType t
 					for (auto i = get<1>(range); i <= get<2>(range) - 3; i += 3, codeword += 10)
 					{
 						unsigned numberTriplet = 0;
+
+						for (auto j = i; j < i + 3; ++j)
+							if (!isdigit(message[i]))
+								throw std::invalid_argument("Character " + std::string(1, message[i]) + " can't be encoded in numeric mode");
+						
 						std::from_chars(message.data() + i, message.data() + i + 3, numberTriplet);
 
 						for (decltype(result)::size_type bit = 0; bit < 10; ++bit)
@@ -1100,10 +1110,15 @@ std::vector<std::vector<bool>> QR::Encode(std::string_view message, SymbolType t
 				if (characterCount % 3)
 				{
 					unsigned remainderBits = characterCount % 3 * 3 + 1, encodedRemainder = 0;
+
+					for (auto i = get<2>(range); i--;)
+						if (!isdigit(message[i]))
+							throw std::invalid_argument("Character " + std::string(1, message[i]) + " can't be encoded in numeric mode");
+
 					std::from_chars(message.data() + get<2>(range) - characterCount % 3, message.data() + get<2>(range), encodedRemainder);
 
 					for (decltype(result)::size_type bit = 0; bit < remainderBits; ++bit)
-						dataBitStream[dataBitStream.size() - remainderBits + bit] = encodedRemainder & 1 << remainderBits - 1 >> bit;
+						dataBitStream[dataBitStream.size() - remainderBits + bit] = encodedRemainder & 1 << (remainderBits - 1) >> bit;
 				}
 
 				break;
@@ -1114,6 +1129,9 @@ std::vector<std::vector<bool>> QR::Encode(std::string_view message, SymbolType t
 				auto countIndicator = GetCharacterCountIndicator(type, version, get<0>(range), get<2>(range) - get<1>(range));
 				decltype(dataBitStream)::size_type characterOffset;
 				auto characterCount = get<2>(range) - get<1>(range);
+
+				if (type == SymbolType::MICRO_QR && version < 2)
+					throw std::invalid_argument("Alphanumeric mode is not supported in M1 symbols");
 
 				dataBitStream.insert(dataBitStream.end(), countIndicator.begin(), countIndicator.end());
 				characterOffset = dataBitStream.size();
@@ -1146,6 +1164,9 @@ std::vector<std::vector<bool>> QR::Encode(std::string_view message, SymbolType t
 				auto countIndicator = GetCharacterCountIndicator(type, version, get<0>(range), get<2>(range) - get<1>(range));
 				decltype(dataBitStream)::size_type codeword;
 
+				if (type == SymbolType::MICRO_QR && version < 3)
+					throw std::invalid_argument("Byte mode is not supported in M1 and M2 symbols");
+
 				dataBitStream.insert(dataBitStream.end(), countIndicator.begin(), countIndicator.end());
 				codeword = dataBitStream.size();
 				dataBitStream.resize(dataBitStream.size() + (get<2>(range) - get<1>(range)) * 8);
@@ -1160,12 +1181,14 @@ std::vector<std::vector<bool>> QR::Encode(std::string_view message, SymbolType t
 			case Mode::KANJI:
 			{
 				auto countIndicator = GetCharacterCountIndicator(type, version, get<0>(range), (get<2>(range) - get<1>(range)) / 2);
-
-				dataBitStream.insert(dataBitStream.end(), countIndicator.begin(), countIndicator.end());
-
-				decltype(dataBitStream)::size_type codeword = dataBitStream.size();
+				decltype(dataBitStream)::size_type codeword;
 				auto characterCount = get<2>(range) - get<1>(range);
 
+				if (type == SymbolType::MICRO_QR && version < 3)
+					throw std::invalid_argument("Kanji mode is not supported in M1 and M2 symbols");
+
+				dataBitStream.insert(dataBitStream.end(), countIndicator.begin(), countIndicator.end());
+				codeword = dataBitStream.size();
 				dataBitStream.resize(dataBitStream.size() + characterCount / 2 * 13);
 
 				for (auto i = get<1>(range); i < characterCount; i += 2, codeword += 13)
