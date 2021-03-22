@@ -9,7 +9,7 @@
 #include <algorithm>
 #include <charconv>
 #include <optional>
-#include <cmath>
+#include <locale>
 
 namespace QR
 {
@@ -1097,7 +1097,7 @@ std::vector<std::vector<bool>> QR::Encode(std::string_view message, SymbolType t
 						unsigned numberTriplet = 0;
 
 						for (auto j = i; j < i + 3; ++j)
-							if (!isdigit(message[i]))
+							if (!std::isdigit(message[i]))
 								throw std::invalid_argument("Character " + std::string(1, message[i]) + " can't be encoded in numeric mode");
 						
 						std::from_chars(message.data() + i, message.data() + i + 3, numberTriplet);
@@ -1112,7 +1112,7 @@ std::vector<std::vector<bool>> QR::Encode(std::string_view message, SymbolType t
 					unsigned remainderBits = characterCount % 3 * 3 + 1, encodedRemainder = 0;
 
 					for (auto i = get<2>(range); i--;)
-						if (!isdigit(message[i]))
+						if (!std::isdigit(message[i]))
 							throw std::invalid_argument("Character " + std::string(1, message[i]) + " can't be encoded in numeric mode");
 
 					std::from_chars(message.data() + get<2>(range) - characterCount % 3, message.data() + get<2>(range), encodedRemainder);
