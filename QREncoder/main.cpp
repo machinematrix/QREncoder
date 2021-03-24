@@ -8,7 +8,7 @@
 
 BMPImage QRToBMP(const std::vector<std::vector<bool>> &code, unsigned multiplier)
 {
-	BMPImage result(code.size() * multiplier, code.size() * multiplier, 1);
+	BMPImage result(static_cast<std::uint16_t>(code.size() * multiplier), static_cast<std::uint16_t>(code.size() * multiplier), 1);
 
 	for (std::vector<std::vector<bool>>::size_type i = 0; i < code.size(); ++i)
 		for (std::vector<std::vector<bool>>::size_type j = 0; j < code[i].size(); ++j)
@@ -17,8 +17,8 @@ BMPImage QRToBMP(const std::vector<std::vector<bool>> &code, unsigned multiplier
 					{
 						Point point;
 
-						point.mX = j * multiplier + x;
-						point.mY = i * multiplier + y;
+						point.mX = static_cast<std::uint16_t>(j * multiplier + x);
+						point.mY = static_cast<std::uint16_t>(i * multiplier + y);
 
 						if (code[i][j])
 							result.setPixelColor(point, { 0, 0, 0 });
@@ -38,11 +38,11 @@ int wmain(int argc, wchar_t **argv)
 	std::ofstream output;
 	std::wregex versionFormat(L"-(M)?([[:digit:]]{1,2})-([LMQH])");
 	std::wcmatch results;
-	std::unordered_map<char, QR::ErrorCorrectionLevel> levels = {
-		{ 'L', QR::ErrorCorrectionLevel::L },
-		{ 'M', QR::ErrorCorrectionLevel::M },
-		{ 'Q', QR::ErrorCorrectionLevel::Q },
-		{ 'H', QR::ErrorCorrectionLevel::H }
+	std::unordered_map<wchar_t, QR::ErrorCorrectionLevel> levels = {
+		{ L'L', QR::ErrorCorrectionLevel::L },
+		{ L'M', QR::ErrorCorrectionLevel::M },
+		{ L'Q', QR::ErrorCorrectionLevel::Q },
+		{ L'H', QR::ErrorCorrectionLevel::H }
 	};
 	std::unordered_map<std::wstring_view, QR::Mode> modes = {
 		{ L"-numeric", QR::Mode::NUMERIC },

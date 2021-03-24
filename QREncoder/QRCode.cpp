@@ -348,7 +348,7 @@ namespace QR
 			return std::vector<bool>(type == SymbolType::MICRO_QR ? 3 + (version - 1) * 2 : 4, false);
 		}
 
-		std::bitset<15> GetFormatInformation(SymbolType type, std::uint8_t version, ErrorCorrectionLevel level, std::uint8_t maskId)
+		std::bitset<15> GetFormatInformation(SymbolType type, std::uint8_t version, ErrorCorrectionLevel level, size_t maskId)
 		{
 			static const std::array<std::bitset<15>, 32> formats = {
 				0b000000000000000,
@@ -494,7 +494,7 @@ namespace QR
 		}
 
 		//From table 3, page 23
-		std::vector<bool> GetCharacterCountIndicator(SymbolType type, std::uint8_t version, Mode mode, std::uint16_t characterCount)
+		std::vector<bool> GetCharacterCountIndicator(SymbolType type, std::uint8_t version, Mode mode, size_t characterCount)
 		{
 			using TableType = std::array<std::array<unsigned, 4>, 4>;
 			static const TableType microModeLengths = { { { 3 }, { 4, 3 }, { 5, 4, 4, 3 }, { 6, 5, 5, 4 } } };
@@ -635,8 +635,8 @@ namespace QR
 			}
 
 			for (const auto &rectangle : functionPatterns)
-				for (unsigned x = rectangle.mFrom.mX; x <= rectangle.mTo.mX; ++x)
-					for (unsigned y = rectangle.mFrom.mY; y <= rectangle.mTo.mY; ++y)
+				for (auto x = rectangle.mFrom.mX; x <= rectangle.mTo.mX; ++x)
+					for (auto y = rectangle.mFrom.mY; y <= rectangle.mTo.mY; ++y)
 						result[y][x] = true;
 
 			return result;
@@ -772,7 +772,7 @@ namespace QR
 			{
 				static const std::vector<bool> feature3Pattern = { 1, 0, 1, 1, 1, 0, 1 };
 				unsigned feature1Score = 0, feature2Score = 0, feature3Score = 0, feature4Score = 0;
-				unsigned totalModules = symbol.size() * symbol.size(), darkModules = 0;
+				size_t totalModules = symbol.size() * symbol.size(), darkModules = 0;
 				int percentage = 0;
 
 				for (Symbol::size_type i = 0; i < symbol.size(); ++i)
@@ -843,7 +843,7 @@ namespace QR
 					feature1Score += GetFeature1Points(consecutiveColumnCounter);
 				}
 
-				percentage = static_cast<double>(darkModules) / static_cast<double>(totalModules) * 100.;
+				percentage = static_cast<int>(static_cast<double>(darkModules) / static_cast<double>(totalModules) * 100.);
 				feature4Score = std::abs(percentage - 50) / 5 * 10;
 
 				return feature1Score + feature2Score + feature3Score + feature4Score;
@@ -956,14 +956,14 @@ namespace QR
 			const std::vector<Symbol::size_type> &centers = GetAlignmentPatternCenters(version);
 			auto symbolSize = GetSymbolSize(QR::SymbolType::QR, version);
 
-			for (unsigned i = 0; i < centers.size(); ++i)
-				for (unsigned j = i; j < centers.size(); ++j)
+			for (decltype(centers.size()) i = 0; i < centers.size(); ++i)
+				for (auto j = i; j < centers.size(); ++j)
 				{
 					auto centerX = centers[j], centerY = centers[i];
 
 					if (!(centerY == 6 && centerX == symbolSize - 7 || centerY == symbolSize - 7 && centerX == 6 || centerY == 6 && centerX == 6))
-						for (unsigned startX = centerX - 2, x = startX; x < centerX + 3; ++x)
-							for (unsigned startY = centerY - 2, y = startY; y < centerY + 3; ++y)
+						for (auto startX = centerX - 2, x = startX; x < centerX + 3; ++x)
+							for (auto startY = centerY - 2, y = startY; y < centerY + 3; ++y)
 							{
 								switch (y - startY)
 								{
@@ -990,7 +990,7 @@ namespace QR
 				}
 		}
 
-		void DrawFormatInformation(Symbol &symbol, SymbolType type, std::uint8_t version, ErrorCorrectionLevel level, std::uint8_t maskId)
+		void DrawFormatInformation(Symbol &symbol, SymbolType type, std::uint8_t version, ErrorCorrectionLevel level, size_t maskId)
 		{
 			auto formatInfo = GetFormatInformation(type, version, level, maskId);
 			unsigned timingPatternRowColumn = type == SymbolType::MICRO_QR ? 0 : 6, symbolSize = GetSymbolSize(type, version), bitIndex = 0;
@@ -1087,7 +1087,7 @@ std::vector<std::vector<bool>> QR::Encode(std::basic_string_view<CharacterType> 
 	int currentRow = GetSymbolSize(type, version) - 1, currentColumn = currentRow, delta = -1;
 	unsigned quietZoneWidth = type == SymbolType::MICRO_QR ? 2 : 4;
 	unsigned dataModuleCount = GetDataModuleCount(type, version) - GetRemainderBitCount(type, version) - GetErrorCorrectionCodewordCount(type, version, level) * 8;
-	std::uint8_t maskId;
+	size_t maskId;
 
 	DrawFinderPattern(result, 0, 0);
 	if (type != SymbolType::MICRO_QR)
@@ -1327,12 +1327,12 @@ std::vector<std::vector<bool>> QR::Encode(std::basic_string_view<CharacterType> 
 			{
 				if (codewordIndex < block.size())
 				{
-					int startingBit = block[codewordIndex].size();
+					auto startingBit = block[codewordIndex].size();
 
 					if (type == SymbolType::MICRO_QR && (version == 1 || version == 3) && &block[codewordIndex] == &block.back() && &blocks == &dataBlocks)
 						startingBit = 4;
 
-					for (int bitIndex = startingBit; bitIndex;)
+					for (auto bitIndex = startingBit; bitIndex;)
 					{
 						if (!mask[currentRow][currentColumn])
 							result[currentRow][currentColumn] = block[codewordIndex][--bitIndex];

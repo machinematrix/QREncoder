@@ -215,7 +215,7 @@ std::ofstream& operator<<(std::ofstream &stream, const BMPImage &image)
 	}
 
 	imageHeader.bfType = MAKEWORD('B', 'M');
-	imageHeader.bfOffBits = sizeof(BITMAPFILEHEADER) + sizeof(BITMAPINFOHEADER) + colorTable.size() * sizeof(decltype(colorTable)::value_type);
+	imageHeader.bfOffBits = static_cast<DWORD>(sizeof(BITMAPFILEHEADER) + sizeof(BITMAPINFOHEADER) + colorTable.size() * sizeof(decltype(colorTable)::value_type));
 	//imageHeader.bfSize = imageHeader.bfOffBits + image.mImpl->mBitmap.size() * image.mImpl->mBitmap.at(0).size() * sizeof(decltype(image.mImpl->mBitmap)::value_type::value_type);
 
 	stream.write(reinterpret_cast<const char*>(&imageHeader), sizeof(imageHeader));
