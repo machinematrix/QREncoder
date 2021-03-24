@@ -810,9 +810,21 @@ namespace QR
 						//Feature 3
 						if (symbol[i][j] == feature3Pattern[feature3Row])
 							++feature3Row;
+						else
+						{
+							feature3Row = 0;
+							if (symbol[i][j] == feature3Pattern[feature3Row])
+								++feature3Row;
+						}
 
 						if (symbol[j][i] == feature3Pattern[feature3Column])
 							++feature3Column;
+						else
+						{
+							feature3Column = 0;
+							if (symbol[j][i] == feature3Pattern[feature3Column])
+								++feature3Column;
+						}
 
 						if (feature3Column == feature3Pattern.size())
 						{

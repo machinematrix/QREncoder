@@ -118,7 +118,7 @@ int wmain(int argc, wchar_t **argv)
 
 	try
 	{
-		output << QRToBMP(QR::Encode<wchar_t>(L"\x629", type.value(), version.value(), level.value(), modeRanges), 4);
+		output << QRToBMP(QR::Encode<wchar_t>(message, type.value(), version.value(), level.value(), modeRanges), 4);
 	}
 	catch (const std::length_error &e)
 	{
