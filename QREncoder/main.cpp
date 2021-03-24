@@ -32,6 +32,7 @@ BMPImage QRToBMP(const std::vector<std::vector<bool>> &code, unsigned multiplier
 int wmain(int argc, wchar_t **argv)
 {
 	using std::cout;
+	using std::wcout;
 	using std::cerr;
 	using std::endl;
 	std::ofstream output;
@@ -89,7 +90,7 @@ int wmain(int argc, wchar_t **argv)
 
 	if (argc == 1)
 	{
-		cout << "Usage: " << argv[0] << " -numeric|alpha|byte message -[M]V-E -output filename\n"
+		wcout << "Usage: " << argv[0] << " -numeric|alpha|byte message -[M]V-E -output filename\n"
 			<< "M: Indicates that the output will be a Micro QR symbol\n"
 			<< "V: Indicates version number. Max is 40 for QR symbols and 4 for Micro QR symbols\n"
 			<< "E: Error correction levels. Valid values are L, M, Q, H" << endl;
@@ -117,7 +118,7 @@ int wmain(int argc, wchar_t **argv)
 
 	try
 	{
-		output << QRToBMP(QR::Encode<wchar_t>(message, type.value(), version.value(), level.value(), modeRanges), 4);
+		output << QRToBMP(QR::Encode<wchar_t>(L"\x629", type.value(), version.value(), level.value(), modeRanges), 4);
 	}
 	catch (const std::length_error &e)
 	{

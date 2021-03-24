@@ -885,15 +885,17 @@ namespace QR
 		}
 
 		//From figure H.1, page 93
-		bool IsKanji(std::uint8_t leadingByte, std::uint8_t trailerByte)
+		bool IsKanji(std::uint16_t character)
 		{
+			std::uint8_t leadingByte = character >> 8, trailerByte = character & 0xFF;
+
 			return (leadingByte == 0x81 || leadingByte == 0x9F || leadingByte == 0xE0 || leadingByte == 0xEA)
 				&& (trailerByte >= 0x40 && trailerByte <= 0x7E || trailerByte >= 0x80 && trailerByte <= 0xFC)
 				|| leadingByte == 0xEB && (trailerByte >= 0x40 && trailerByte <= 0x7E || trailerByte >= 0x80 && trailerByte <= 0xBF);
 		}
 
 		//Returns the most compact Mode in which the character can be encoded in.
-		Mode GetMinimalMode(std::uint8_t leadingByte, std::optional<std::uint8_t> trailerByte)
+		Mode GetMinimalMode(std::uint8_t leadingByte, std::optional<std::uint8_t> trailerByte = std::optional<std::uint8_t>())
 		{
 			static const std::unordered_set<std::uint8_t> characters = { ' ', '$', '%', '*', '+', '-', '.', '/', ':' };
 			Mode result;
@@ -904,7 +906,7 @@ namespace QR
 				if (std::isalpha(leadingByte) || characters.count(leadingByte))
 					result = Mode::ALPHANUMERIC;
 				else
-					if (trailerByte.has_value() && IsKanji(leadingByte, trailerByte.value()))
+					if (trailerByte.has_value() && IsKanji(leadingByte << 8 | trailerByte.value()))
 						result = Mode::KANJI;
 					else
 						result = Mode::BYTE;

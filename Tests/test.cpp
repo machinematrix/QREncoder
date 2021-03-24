@@ -13,6 +13,7 @@ namespace QR
 	template <typename CharacterType> std::uint8_t GetAlphanumericCode(CharacterType);
 	Mode GetMinimalMode(std::uint8_t, std::optional<std::uint8_t> = std::optional<std::uint8_t>());
 	template <typename CharacterType> std::uint16_t ToInteger(const std::vector<CharacterType>&);
+	bool IsKanji(std::uint16_t);
 }
 
 TEST(GetAlphanumericCode, ValidCharacters)
@@ -43,6 +44,15 @@ TEST(GetMinimalMode, General)
 
 	for (auto c : alphaTable)
 		EXPECT_EQ(QR::GetMinimalMode(c), QR::Mode::ALPHANUMERIC);
+
+	for (const std::pair<std::uint16_t, std::uint16_t> &kanjiRange : {
+		std::make_pair(0x8140, 0x817E), std::make_pair(0x8180, 0x81FC),
+		std::make_pair(0x9F40, 0X9F7E), std::make_pair(0x9F80, 0x9FFC),
+		std::make_pair(0xE040, 0xE07E), std::make_pair(0xE080, 0xE0FC),
+		std::make_pair(0xEA40, 0xEA7E), std::make_pair(0xEA80, 0xEAFC),
+		std::make_pair(0xEB40, 0xEB7E), std::make_pair(0xEB80, 0xEBBF) })
+		for (auto i = kanjiRange.first; i <= kanjiRange.second; ++i)
+			EXPECT_EQ(QR::GetMinimalMode(i >> 8, i & 0xFF), QR::Mode::KANJI);
 }
 
 TEST(ToInteger, Triplets)
@@ -93,4 +103,13 @@ TEST(Encode, OutputEquality)
 TEST(Encode, KanjiOddByteCount)
 {
 	EXPECT_THROW(QR::Encode<char>("\xBE\x8C\xBE", QR::SymbolType::QR, 1, QR::ErrorCorrectionLevel::L, QR::Mode::KANJI), std::invalid_argument);
+}
+
+TEST(IsKanji, General)
+{
+	EXPECT_TRUE(QR::IsKanji(0x817E));
+	EXPECT_FALSE(QR::IsKanji(0x817F));
+	EXPECT_TRUE(QR::IsKanji(0xEBBF));
+	EXPECT_FALSE(QR::IsKanji(0xEBC0));
+	EXPECT_FALSE(QR::IsKanji(0xFFFF));
 }
