@@ -1,4 +1,4 @@
-﻿#include <fstream>
+#include <fstream>
 #include <iostream>
 #include <unordered_map>
 #include <regex>
@@ -29,27 +29,27 @@ BMPImage QRToBMP(const std::vector<std::vector<bool>> &code, unsigned multiplier
 	return result;
 }
 
-int main(int argc, char **argv)
+int wmain(int argc, wchar_t **argv)
 {
 	using std::cout;
 	using std::cerr;
 	using std::endl;
 	std::ofstream output;
-	std::regex versionFormat("-(M)?([[:digit:]]{1,2})-([LMQH])");
-	std::cmatch results;
+	std::wregex versionFormat(L"-(M)?([[:digit:]]{1,2})-([LMQH])");
+	std::wcmatch results;
 	std::unordered_map<char, QR::ErrorCorrectionLevel> levels = {
 		{ 'L', QR::ErrorCorrectionLevel::L },
 		{ 'M', QR::ErrorCorrectionLevel::M },
 		{ 'Q', QR::ErrorCorrectionLevel::Q },
 		{ 'H', QR::ErrorCorrectionLevel::H }
 	};
-	std::unordered_map<std::string_view, QR::Mode> modes = {
-		{ "-numeric", QR::Mode::NUMERIC },
-		{ "-alpha", QR::Mode::ALPHANUMERIC },
-		{ "-byte", QR::Mode::BYTE }
+	std::unordered_map<std::wstring_view, QR::Mode> modes = {
+		{ L"-numeric", QR::Mode::NUMERIC },
+		{ L"-alpha", QR::Mode::ALPHANUMERIC },
+		{ L"-byte", QR::Mode::BYTE }
 	};
 	
-	std::string message;
+	std::wstring message;
 	std::optional<QR::SymbolType> type;
 	std::optional<std::uint8_t> version;
 	std::optional<QR::ErrorCorrectionLevel> level;
@@ -58,7 +58,7 @@ int main(int argc, char **argv)
 	for (int i = 1; i < argc - 1; ++i)
 	{
 		decltype(modes)::iterator modeIt;
-		std::string_view argument(argv[i]);
+		std::wstring_view argument(argv[i]);
 
 		if ((modeIt = modes.find(argument)) != modes.end())
 		{
@@ -68,12 +68,12 @@ int main(int argc, char **argv)
 			modeRanges.emplace_back(modeIt->second, oldSize, message.size());
 			++i;
 		}
-		else if (argument == "-output")
+		else if (argument == L"-output")
 		{
 			output.open(argv[i + 1], std::ios_base::binary);
 			++i;
 		}
-		else if (argument == "-M1")
+		else if (argument == L"-M1")
 		{
 			type = QR::SymbolType::MICRO_QR;
 			version = 1;
@@ -117,7 +117,7 @@ int main(int argc, char **argv)
 
 	try
 	{
-		output << QRToBMP(QR::Encode(message, type.value(), version.value(), level.value(), modeRanges), 4);
+		output << QRToBMP(QR::Encode<wchar_t>(message, type.value(), version.value(), level.value(), modeRanges), 4);
 	}
 	catch (const std::length_error &e)
 	{

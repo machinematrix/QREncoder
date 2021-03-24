@@ -16,7 +16,7 @@ namespace QR
 	using Symbol = std::vector<std::vector<bool>>;
 	using BlockLayoutVector = std::vector<std::tuple<unsigned, unsigned, unsigned>>;
 
-	#ifdef NDEBUG
+	#ifndef TESTS
 	namespace
 	{
 		#endif
@@ -197,7 +197,7 @@ namespace QR
 				{ { { 5, 122, 98 }, { 1, 123, 99 } }, { { 7, 73, 45 }, { 3, 74, 46 } }, { { 15, 43, 19 }, { 2, 44, 20 } }, { { 3, 45, 15 }, { 13, 46, 16 } } },
 				{ { { 1, 135, 107 }, { 5, 136, 108 } }, { { 10, 74, 46 }, { 1, 75, 47 } }, { { 1, 50, 22 }, { 15, 51, 23 } }, { { 2, 42, 14 }, { 17, 43, 15 } } },
 				{ { { 5, 150, 120 }, { 1, 151, 121 } }, { { 9, 69, 43 }, { 4, 70, 44 } }, { { 17, 50, 22 }, { 1, 51, 23 } }, { { 2, 42, 14 }, { 19, 43, 15 } } },
-				{ { { 3, 141, 113 }, { 44, 142, 114 } }, { { 3, 70, 44 }, { 11, 71, 45 } }, { { 17, 47, 21 }, { 4, 48, 22 } }, { { 9, 39, 13 }, { 16, 40, 14 } } },
+				{ { { 3, 141, 113 }, { 4, 142, 114 } }, { { 3, 70, 44 }, { 11, 71, 45 } }, { { 17, 47, 21 }, { 4, 48, 22 } }, { { 9, 39, 13 }, { 16, 40, 14 } } },
 				{ { { 3, 135, 107 }, { 5, 136, 108 } }, { { 3, 67, 41 }, { 13, 68, 42 } }, { { 15, 54, 24 }, { 5, 55, 25 } }, { { 15, 43, 15 }, { 10, 44, 16 } } },
 				{ { { 4, 144, 116 }, { 4, 145, 117 } }, { { 17, 68, 42 } }, { { 17, 50, 22 }, { 6, 51, 23 } }, { { 19, 46, 16 }, { 6, 47, 17 } } },
 				{ { { 2, 139, 111 }, { 7, 140, 112 } }, { { 17, 74, 46 } }, { { 7, 54, 24 }, { 16, 55, 25 } }, { { 34, 37, 13 } } },
@@ -642,50 +642,52 @@ namespace QR
 			return result;
 		}
 
-		std::uint8_t GetAlphanumericCode(std::uint8_t asciiCharacter)
+		template<typename CharacterType>
+		std::uint8_t GetAlphanumericCode(CharacterType character)
 		{
+			static const std::locale loc;
 			std::uint8_t result = 0;
 
-			if (std::isdigit(asciiCharacter))
-				result = asciiCharacter - '0';
+			if (std::isdigit(character, loc))
+				result = character - static_cast<CharacterType>('0');
 			else
-				if (std::isalpha(asciiCharacter))
-					if (std::isupper(asciiCharacter))
-						result = asciiCharacter - 'A' + 10;
+				if (std::isalpha(character, loc))
+					if (std::isupper(character, loc))
+						result = character - static_cast<CharacterType>('A') + 10;
 					else
-						result = asciiCharacter - 'a' + 10;
+						result = character - static_cast<CharacterType>('a') + 10;
 				else
-					switch (asciiCharacter)
+					switch (character)
 					{
-						case ' ':
+						case static_cast<CharacterType>(' '):
 							result = 36;
 							break;
-						case '$':
+						case static_cast<CharacterType>('$'):
 							result = 37;
 							break;
-						case '%':
+						case static_cast<CharacterType>('%'):
 							result = 38;
 							break;
-						case '*':
+						case static_cast<CharacterType>('*'):
 							result = 39;
 							break;
-						case '+':
+						case static_cast<CharacterType>('+'):
 							result = 40;
 							break;
-						case '-':
+						case static_cast<CharacterType>('-'):
 							result = 41;
 							break;
-						case '.':
+						case static_cast<CharacterType>('.'):
 							result = 42;
 							break;
-						case '/':
+						case static_cast<CharacterType>('/'):
 							result = 43;
 							break;
-						case ':':
+						case static_cast<CharacterType>(':'):
 							result = 44;
 							break;
 						default:
-							throw std::invalid_argument("Character " + std::string(1, asciiCharacter) + " can't be encoded in alphanumeric mode");
+							throw std::invalid_argument("Character can't be encoded in alphanumeric mode");
 					}
 
 			return result;
@@ -864,6 +866,24 @@ namespace QR
 			}
 		}
 
+		template <typename CharacterType>
+		std::uint16_t ToInteger(const std::vector<CharacterType> &characters)
+		{
+			static const std::locale loc;
+			CharacterType zero = 0x30;
+			std::uint16_t result = 0, multiplier = 1;
+
+			for (typename std::vector<CharacterType>::const_reverse_iterator it = characters.crbegin(); it != characters.crend(); ++it, multiplier *= 10)
+			{
+				if (!std::isdigit(*it, loc))
+					throw std::invalid_argument("Character can't be encoded in numeric mode");
+
+				result += (*it - zero) * multiplier;
+			}
+
+			return result;
+		}
+
 		//From figure H.1, page 93
 		bool IsKanji(std::uint8_t leadingByte, std::uint8_t trailerByte)
 		{
@@ -1039,12 +1059,17 @@ namespace QR
 			}
 		}
 
-		#ifdef NDEBUG
+		#ifndef TESTS
+		template std::uint16_t QR::ToInteger<std::string_view::value_type>(const std::vector<char> &);
+		template std::uint16_t QR::ToInteger<std::wstring_view::value_type>(const std::vector<wchar_t> &);
+		template std::uint8_t QR::GetAlphanumericCode<std::string_view::value_type>(std::string_view::value_type);
+		template std::uint8_t QR::GetAlphanumericCode<std::wstring_view::value_type>(std::wstring_view::value_type);
 	}
 	#endif
 }
 
-std::vector<std::vector<bool>> QR::Encode(std::string_view message, SymbolType type, std::uint8_t version, ErrorCorrectionLevel level, const std::vector<ModeRange> &modes)
+template <typename CharacterType>
+std::vector<std::vector<bool>> QR::Encode(std::basic_string_view<CharacterType> message, SymbolType type, std::uint8_t version, ErrorCorrectionLevel level, const std::vector<ModeRange> &modes)
 {
 	using std::vector; using std::tuple; using std::bitset; using std::get;
 
@@ -1056,7 +1081,7 @@ std::vector<std::vector<bool>> QR::Encode(std::string_view message, SymbolType t
 	vector<bool> dataBitStream;
 	BlockLayoutVector layouts = GetBlockLayout(type, version, level);
 	vector<vector<bitset<8>>> dataBlocks, errorCorrectionBlocks;
-	decltype(dataBitStream)::size_type bitIndex = 0;
+	typename decltype(dataBitStream)::size_type bitIndex = 0;
 	int currentRow = GetSymbolSize(type, version) - 1, currentColumn = currentRow, delta = -1;
 	unsigned quietZoneWidth = type == SymbolType::MICRO_QR ? 2 : 4;
 	unsigned dataModuleCount = GetDataModuleCount(type, version) - GetRemainderBitCount(type, version) - GetErrorCorrectionCodewordCount(type, version, level) * 8;
@@ -1083,7 +1108,7 @@ std::vector<std::vector<bool>> QR::Encode(std::string_view message, SymbolType t
 			case Mode::NUMERIC:
 			{
 				auto countIndicator = GetCharacterCountIndicator(type, version, get<0>(range), get<2>(range) - get<1>(range));
-				decltype(dataBitStream)::size_type codeword;
+				typename decltype(dataBitStream)::size_type codeword;
 				auto characterCount = get<2>(range) - get<1>(range);
 
 				dataBitStream.insert(dataBitStream.end(), countIndicator.begin(), countIndicator.end());
@@ -1096,13 +1121,9 @@ std::vector<std::vector<bool>> QR::Encode(std::string_view message, SymbolType t
 					{
 						unsigned numberTriplet = 0;
 
-						for (auto j = i; j < i + 3; ++j)
-							if (!std::isdigit(message[i]))
-								throw std::invalid_argument("Character " + std::string(1, message[i]) + " can't be encoded in numeric mode");
-						
-						std::from_chars(message.data() + i, message.data() + i + 3, numberTriplet);
+						numberTriplet = ToInteger<CharacterType>({ message.data() + i, message.data() + i + 3 });
 
-						for (decltype(result)::size_type bit = 0; bit < 10; ++bit)
+						for (typename decltype(result)::size_type bit = 0; bit < 10; ++bit)
 							dataBitStream[codeword + bit] = numberTriplet & 1 << 9 >> bit;
 					}
 				}
@@ -1111,13 +1132,9 @@ std::vector<std::vector<bool>> QR::Encode(std::string_view message, SymbolType t
 				{
 					unsigned remainderBits = characterCount % 3 * 3 + 1, encodedRemainder = 0;
 
-					for (auto i = get<2>(range); i--;)
-						if (!std::isdigit(message[i]))
-							throw std::invalid_argument("Character " + std::string(1, message[i]) + " can't be encoded in numeric mode");
+					encodedRemainder = ToInteger<CharacterType>({ message.data() + get<2>(range) - characterCount % 3, message.data() + get<2>(range) });
 
-					std::from_chars(message.data() + get<2>(range) - characterCount % 3, message.data() + get<2>(range), encodedRemainder);
-
-					for (decltype(result)::size_type bit = 0; bit < remainderBits; ++bit)
+					for (typename decltype(result)::size_type bit = 0; bit < remainderBits; ++bit)
 						dataBitStream[dataBitStream.size() - remainderBits + bit] = encodedRemainder & 1 << (remainderBits - 1) >> bit;
 				}
 
@@ -1127,7 +1144,7 @@ std::vector<std::vector<bool>> QR::Encode(std::string_view message, SymbolType t
 			case Mode::ALPHANUMERIC:
 			{
 				auto countIndicator = GetCharacterCountIndicator(type, version, get<0>(range), get<2>(range) - get<1>(range));
-				decltype(dataBitStream)::size_type characterOffset;
+				typename decltype(dataBitStream)::size_type characterOffset;
 				auto characterCount = get<2>(range) - get<1>(range);
 
 				if (type == SymbolType::MICRO_QR && version < 2)
@@ -1143,7 +1160,7 @@ std::vector<std::vector<bool>> QR::Encode(std::string_view message, SymbolType t
 					{
 						unsigned encodedPair = GetAlphanumericCode(message[i]) * 45 + GetAlphanumericCode(message[i + 1]);
 
-						for (decltype(result)::size_type bit = 0; bit < 11; ++bit)
+						for (typename decltype(result)::size_type bit = 0; bit < 11; ++bit)
 							dataBitStream[characterOffset + bit] = encodedPair & 1 << 10 >> bit;
 					}
 				}
@@ -1152,7 +1169,7 @@ std::vector<std::vector<bool>> QR::Encode(std::string_view message, SymbolType t
 				{
 					unsigned lastCharacter = GetAlphanumericCode(message[get<2>(range) - 1]);
 
-					for (decltype(result)::size_type bit = 0; bit < 6; ++bit)
+					for (typename decltype(result)::size_type bit = 0; bit < 6; ++bit)
 						dataBitStream[characterOffset + bit] = lastCharacter & 1 << 5 >> bit;
 				}
 
@@ -1161,37 +1178,41 @@ std::vector<std::vector<bool>> QR::Encode(std::string_view message, SymbolType t
 
 			case Mode::BYTE:
 			{
-				auto countIndicator = GetCharacterCountIndicator(type, version, get<0>(range), get<2>(range) - get<1>(range));
-				decltype(dataBitStream)::size_type codeword;
+				auto bitsPerCharacter = 8 * sizeof(CharacterType);
+				auto countIndicator = GetCharacterCountIndicator(type, version, get<0>(range), (get<2>(range) - get<1>(range)) * sizeof(CharacterType));
+				typename decltype(dataBitStream)::size_type codeword;
 
 				if (type == SymbolType::MICRO_QR && version < 3)
 					throw std::invalid_argument("Byte mode is not supported in M1 and M2 symbols");
 
 				dataBitStream.insert(dataBitStream.end(), countIndicator.begin(), countIndicator.end());
 				codeword = dataBitStream.size();
-				dataBitStream.resize(dataBitStream.size() + (get<2>(range) - get<1>(range)) * 8);
+				dataBitStream.resize(dataBitStream.size() + (get<2>(range) - get<1>(range)) * bitsPerCharacter);
 
-				for (auto i = get<1>(range); i < get<2>(range); ++i, codeword += 8)
-					for (decltype(result)::size_type bit = 8; bit--;)
-						dataBitStream[codeword + bit] = message[i] & 1 << 7 >> bit;
+				for (auto i = get<1>(range) * sizeof(CharacterType); i < get<2>(range) * sizeof(CharacterType); ++i, codeword += 8)
+					for (typename decltype(result)::size_type bit = 0; bit < 8; ++bit)
+						dataBitStream[codeword + bit] = *(reinterpret_cast<const std::uint8_t*>(message.data()) + i) & 1 << 7 >> bit;
 
 				break;
 			}
 
 			case Mode::KANJI:
 			{
-				auto countIndicator = GetCharacterCountIndicator(type, version, get<0>(range), (get<2>(range) - get<1>(range)) / 2);
-				decltype(dataBitStream)::size_type codeword;
 				auto characterCount = get<2>(range) - get<1>(range);
+				auto countIndicator = GetCharacterCountIndicator(type, version, get<0>(range), characterCount / (sizeof(std::wstring_view::value_type) / sizeof(CharacterType)));
+				typename decltype(dataBitStream)::size_type codeword;
 
 				if (type == SymbolType::MICRO_QR && version < 3)
 					throw std::invalid_argument("Kanji mode is not supported in M1 and M2 symbols");
 
+				if (characterCount * sizeof(CharacterType) % 2)
+					throw std::invalid_argument("Invalid Kanji sequence");
+
 				dataBitStream.insert(dataBitStream.end(), countIndicator.begin(), countIndicator.end());
 				codeword = dataBitStream.size();
-				dataBitStream.resize(dataBitStream.size() + characterCount / 2 * 13);
+				dataBitStream.resize(dataBitStream.size() + characterCount / (sizeof(std::wstring_view::value_type) / sizeof(CharacterType)) * 13);
 
-				for (auto i = get<1>(range); i < characterCount; i += 2, codeword += 13)
+				for (auto i = get<1>(range); i < characterCount; i += (sizeof(std::wstring_view::value_type) / sizeof(CharacterType)), codeword += 13)
 				{
 					std::uint16_t kanjiCharacter = *reinterpret_cast<const std::uint16_t*>(message.data() + i);
 
@@ -1203,7 +1224,7 @@ std::vector<std::vector<bool>> QR::Encode(std::string_view message, SymbolType t
 
 					kanjiCharacter = (kanjiCharacter >> 8) * 0xC0 + (kanjiCharacter & 0xFF);
 
-					for (decltype(result)::size_type bit = 0; bit < 13; ++bit)
+					for (typename decltype(result)::size_type bit = 0; bit < 13; ++bit)
 						dataBitStream[codeword + bit] = kanjiCharacter & 1 << 12 >> bit;
 				}
 
@@ -1231,7 +1252,7 @@ std::vector<std::vector<bool>> QR::Encode(std::string_view message, SymbolType t
 		if (dataBitStream.size() < dataModuleCount)
 		{
 			vector<vector<bool>> padCodewords;
-			decltype(padCodewords)::size_type counter = 0;
+			typename decltype(padCodewords)::size_type counter = 0;
 
 			if (type == SymbolType::MICRO_QR && (version == 1 || version == 3))
 				padCodewords = { { 0, 0, 0, 0 } }; //Pad codeword for M1 and M3
@@ -1249,18 +1270,18 @@ std::vector<std::vector<bool>> QR::Encode(std::string_view message, SymbolType t
 	std::sort(layouts.begin(), layouts.end(), [](const decltype(layouts)::value_type &lhs, const decltype(layouts)::value_type &rhs) -> bool { return get<1>(lhs) < get<1>(rhs); });
 	for (const auto &blockLayout : layouts)
 	{
-		decltype(dataBlocks)::value_type block(get<2>(blockLayout)), errorBlock;
+		typename decltype(dataBlocks)::value_type block(get<2>(blockLayout)), errorBlock;
 		auto &generatorPolynomial = GetPolynomialCoefficientExponents(get<1>(blockLayout) - get<2>(blockLayout));
 		unsigned n = get<2>(blockLayout);
 
 		for (auto &codeword : block)
 		{
-			decltype(dataBitStream)::size_type startingBit = codeword.size();
+			typename decltype(dataBitStream)::size_type startingBit = codeword.size();
 
 			if (type == SymbolType::MICRO_QR && (version == 1 || version == 3) && &codeword == &block.back())
 				startingBit = 4;
 
-			for (decltype(dataBitStream)::size_type i = startingBit; i--;)
+			for (typename decltype(dataBitStream)::size_type i = startingBit; i--;)
 				codeword[i] = dataBitStream[bitIndex++];
 		}
 
@@ -1378,7 +1399,14 @@ std::vector<std::vector<bool>> QR::Encode(std::string_view message, SymbolType t
 	return result;
 }
 
-std::vector<std::vector<bool>> QR::Encode(std::string_view message, SymbolType type, std::uint8_t version, ErrorCorrectionLevel level, Mode mode)
+template <typename CharacterType>
+std::vector<std::vector<bool>> QR::Encode(std::basic_string_view<CharacterType> message, SymbolType type, std::uint8_t version, ErrorCorrectionLevel level, Mode mode)
 {
 	return Encode(message, type, version, level, { { mode, 0, message.size() } });
 }
+
+template std::vector<std::vector<bool>> QR::Encode<std::string_view::value_type>(std::basic_string_view<std::string_view::value_type>, SymbolType, std::uint8_t, ErrorCorrectionLevel, const std::vector<ModeRange>&);
+template std::vector<std::vector<bool>> QR::Encode<std::wstring_view::value_type>(std::basic_string_view<std::wstring_view::value_type>, SymbolType, std::uint8_t, ErrorCorrectionLevel, const std::vector<ModeRange> &);
+
+template std::vector<std::vector<bool>> QR::Encode<std::string_view::value_type>(std::basic_string_view<std::string_view::value_type>, SymbolType, std::uint8_t, ErrorCorrectionLevel, Mode);
+template std::vector<std::vector<bool>> QR::Encode<std::wstring_view::value_type>(std::basic_string_view<std::wstring_view::value_type>, SymbolType, std::uint8_t, ErrorCorrectionLevel, Mode);
