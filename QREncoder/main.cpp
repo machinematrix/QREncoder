@@ -29,28 +29,28 @@ BMPImage QRToBMP(const std::vector<std::vector<bool>> &code, unsigned multiplier
 	return result;
 }
 
-int wmain(int argc, wchar_t **argv)
+int main(int argc, char **argv)
 {
 	using std::cout;
 	using std::wcout;
 	using std::cerr;
 	using std::endl;
 	std::ofstream output;
-	std::wregex versionFormat(L"-(M)?([[:digit:]]{1,2})-([LMQH])");
-	std::wcmatch results;
-	std::unordered_map<wchar_t, QR::ErrorCorrectionLevel> levels = {
-		{ L'L', QR::ErrorCorrectionLevel::L },
-		{ L'M', QR::ErrorCorrectionLevel::M },
-		{ L'Q', QR::ErrorCorrectionLevel::Q },
-		{ L'H', QR::ErrorCorrectionLevel::H }
+	std::regex versionFormat("-(M)?([[:digit:]]{1,2})-([LMQH])");
+	std::cmatch results;
+	std::unordered_map<char, QR::ErrorCorrectionLevel> levels = {
+		{ 'L', QR::ErrorCorrectionLevel::L },
+		{ 'M', QR::ErrorCorrectionLevel::M },
+		{ 'Q', QR::ErrorCorrectionLevel::Q },
+		{ 'H', QR::ErrorCorrectionLevel::H }
 	};
-	std::unordered_map<std::wstring_view, QR::Mode> modes = {
-		{ L"-numeric", QR::Mode::NUMERIC },
-		{ L"-alpha", QR::Mode::ALPHANUMERIC },
-		{ L"-byte", QR::Mode::BYTE }
+	std::unordered_map<std::string_view, QR::Mode> modes = {
+		{ "-numeric", QR::Mode::NUMERIC },
+		{ "-alpha", QR::Mode::ALPHANUMERIC },
+		{ "-byte", QR::Mode::BYTE }
 	};
 	
-	std::wstring message;
+	std::string message;
 	std::optional<QR::SymbolType> type;
 	std::optional<std::uint8_t> version;
 	std::optional<QR::ErrorCorrectionLevel> level;
@@ -59,7 +59,7 @@ int wmain(int argc, wchar_t **argv)
 	for (int i = 1; i < argc - 1; ++i)
 	{
 		decltype(modes)::iterator modeIt;
-		std::wstring_view argument(argv[i]);
+		std::string_view argument(argv[i]);
 
 		if ((modeIt = modes.find(argument)) != modes.end())
 		{
@@ -69,12 +69,12 @@ int wmain(int argc, wchar_t **argv)
 			modeRanges.emplace_back(modeIt->second, oldSize, message.size());
 			++i;
 		}
-		else if (argument == L"-output")
+		else if (argument == "-output")
 		{
 			output.open(argv[i + 1], std::ios_base::binary);
 			++i;
 		}
-		else if (argument == L"-M1")
+		else if (argument == "-M1")
 		{
 			type = QR::SymbolType::MICRO_QR;
 			version = 1;
@@ -90,7 +90,7 @@ int wmain(int argc, wchar_t **argv)
 
 	if (argc == 1)
 	{
-		wcout << "Usage: " << argv[0] << " -numeric|alpha|byte message -[M]V-E -output filename\n"
+		cout << "Usage: " << argv[0] << " -numeric|alpha|byte message -[M]V-E -output filename\n"
 			<< "M: Indicates that the output will be a Micro QR symbol\n"
 			<< "V: Indicates version number. Max is 40 for QR symbols and 4 for Micro QR symbols\n"
 			<< "E: Error correction levels. Valid values are L, M, Q, H" << endl;
@@ -118,7 +118,7 @@ int wmain(int argc, wchar_t **argv)
 
 	try
 	{
-		output << QRToBMP(QR::Encode<wchar_t>(message, type.value(), version.value(), level.value(), modeRanges), 4);
+		output << QRToBMP(QR::Encode<char>(message, type.value(), version.value(), level.value(), modeRanges), 4);
 	}
 	catch (const std::length_error &e)
 	{
