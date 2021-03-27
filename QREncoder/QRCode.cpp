@@ -10,6 +10,7 @@
 #include <charconv>
 #include <optional>
 #include <locale>
+#include <regex>
 
 namespace QR
 {
@@ -901,7 +902,7 @@ namespace QR
 		{
 			std::uint8_t leadingByte = character >> 8, trailerByte = character & 0xFF;
 
-			return (leadingByte == 0x81 || leadingByte == 0x9F || leadingByte == 0xE0 || leadingByte == 0xEA)
+			return (leadingByte >= 0x81 && leadingByte <= 0x9F || leadingByte >= 0xE0 && leadingByte <= 0xEA)
 				&& (trailerByte >= 0x40 && trailerByte <= 0x7E || trailerByte >= 0x80 && trailerByte <= 0xFC)
 				|| leadingByte == 0xEB && (trailerByte >= 0x40 && trailerByte <= 0x7E || trailerByte >= 0x80 && trailerByte <= 0xBF);
 		}
@@ -1424,3 +1425,354 @@ template std::vector<std::vector<bool>> QR::Encode<std::wstring_view::value_type
 
 template std::vector<std::vector<bool>> QR::Encode<std::string_view::value_type>(std::basic_string_view<std::string_view::value_type>, SymbolType, std::uint8_t, ErrorCorrectionLevel, Mode);
 template std::vector<std::vector<bool>> QR::Encode<std::wstring_view::value_type>(std::basic_string_view<std::wstring_view::value_type>, SymbolType, std::uint8_t, ErrorCorrectionLevel, Mode);
+
+namespace QR
+{
+}
+
+struct QR::QREncoder::Impl
+{
+public:
+	std::vector<bool> mBitStream;
+	unsigned mVersion;
+	SymbolType mType;
+	ErrorCorrectionLevel mLevel;
+	std::optional<Mode> mLastMode = std::optional<Mode>();
+};
+
+QR::QREncoder::QREncoder(SymbolType type, unsigned version, ErrorCorrectionLevel level)
+	:mImpl(new Impl{ {}, version, type, level })
+{}
+
+QR::QREncoder::QREncoder(const QREncoder &other)
+	:mImpl(new Impl{ *other.mImpl })
+{}
+
+QR::QREncoder &QR::QREncoder::operator=(const QREncoder &other)
+{
+	*mImpl = *other.mImpl;
+
+	return *this;
+}
+
+QR::QREncoder::~QREncoder() = default;
+
+template<typename CharacterType>
+void QR::QREncoder::addCharacters(std::basic_string_view<CharacterType> message, Mode mode)
+{
+	using std::get;
+	static const std::regex eciFormat("(\\\\)?\\\\([^]*)");
+	std::vector<bool> modeIndicator, characterCountIndicator, dataBits;
+	std::vector<typename decltype(message)::size_type> slashes;
+	size_t characterCount = 0;
+	unsigned dataModuleCount = GetDataModuleCount(mImpl->mType, mImpl->mVersion) - GetRemainderBitCount(mImpl->mType, mImpl->mVersion) - GetErrorCorrectionCodewordCount(mImpl->mType, mImpl->mVersion, mImpl->mLevel) * 8;
+
+	switch (mode)
+	{
+		case Mode::NUMERIC:
+		{
+			std::vector<CharacterType> digits;
+
+			for (typename decltype(message)::size_type i = 0; i < message.size(); ++i)
+			{
+				digits.push_back(message[i]);
+
+				if (digits.size() == 3 || i == message.size() - 1 && !digits.empty())
+				{
+					unsigned encodedDigits = ToInteger(digits);
+
+					characterCount += digits.size();
+
+					for (size_t bit = 0, bitCount = digits.size() * 3 + 1; bit < bitCount; ++bit)
+						dataBits.push_back(encodedDigits & 1 << (bitCount - 1) >> bit);
+
+					digits.clear();
+				}
+			}
+
+			break;
+		}
+
+		case Mode::ALPHANUMERIC:
+		{
+			std::vector<CharacterType> characters;
+
+			if (mImpl->mType == SymbolType::MICRO_QR && mImpl->mVersion < 2)
+				throw std::invalid_argument("Alphanumeric mode is not supported in M1 symbols");
+
+			for (typename decltype(message)::size_type i = 0; i < message.size(); ++i)
+			{
+				characters.push_back(message[i]);
+
+				if (characters.size() == 2 || i == message.size() - 1 && !characters.empty())
+				{
+					unsigned encodedCharacters = characters.size() == 2 ? GetAlphanumericCode(characters[0]) * 45 + GetAlphanumericCode(characters[1]) : GetAlphanumericCode(characters[0]);
+					
+					characterCount += characters.size();
+
+					for (size_t bit = 0, bitCount = characters.size() == 2 ? 11 : 6; bit < bitCount; ++bit)
+						dataBits.push_back(encodedCharacters & 1 << (bitCount - 1) >> bit);
+
+					characters.clear();
+				}
+			}
+
+			break;
+		}
+
+		case Mode::BYTE:
+		{
+			if (mImpl->mType == SymbolType::MICRO_QR && mImpl->mVersion < 3)
+				throw std::invalid_argument("Byte mode is not supported in M1 and M2 symbols");
+
+			for (unsigned i = 0; i < message.size() * sizeof(CharacterType); ++i, ++characterCount)
+			{
+				for (unsigned bit = 0; bit < 8; ++bit)
+					dataBits.push_back(*(reinterpret_cast<const std::uint8_t*>(message.data()) + i) & 1 << 7 >> bit);
+			}
+
+			break;
+		}
+
+		case Mode::KANJI:
+		{
+			if (mImpl->mType == SymbolType::MICRO_QR && mImpl->mVersion < 3)
+				throw std::invalid_argument("Kanji mode is not supported in M1 and M2 symbols");
+
+			for (typename decltype(message)::size_type i = 0; i < message.size() * sizeof(CharacterType); i += 2, ++characterCount)
+			{
+				std::uint16_t kanjiCharacter = *reinterpret_cast<const std::uint16_t*>(reinterpret_cast<const std::uint8_t*>(message.data()) + i);
+
+				if (i == message.size() * sizeof(CharacterType) - 1) //Odd number of character bytes in message
+					throw std::invalid_argument("Invalid Kanji sequence");
+
+				if (!IsKanji(kanjiCharacter))
+					throw std::invalid_argument("Character can't be encoded in Kanji mode");
+
+				if (kanjiCharacter >= 0x8140 && kanjiCharacter <= 0x9FFC)
+					kanjiCharacter -= 0x8140;
+				else
+					if (kanjiCharacter >= 0xE040 && kanjiCharacter <= 0xEBBF)
+						kanjiCharacter -= 0xC140;
+
+				kanjiCharacter = (kanjiCharacter >> 8) * 0xC0 + (kanjiCharacter & 0xFF);
+
+				for (unsigned bit = 0; bit < 13; ++bit)
+					dataBits.push_back(kanjiCharacter & 1 << 12 >> bit);
+			}
+
+			break;
+		}
+	}
+
+	if (mode != mImpl->mLastMode)
+	{
+		modeIndicator = GetModeIndicator(mImpl->mType, mImpl->mVersion, mode);
+		characterCountIndicator = GetCharacterCountIndicator(mImpl->mType, mImpl->mVersion, mode, characterCount);
+		mImpl->mLastMode = mode;
+	}
+
+	if (mImpl->mBitStream.size() + modeIndicator.size() + characterCountIndicator.size() + dataBits.size() <= dataModuleCount)
+	{
+		mImpl->mBitStream.insert(mImpl->mBitStream.end(), modeIndicator.begin(), modeIndicator.end());
+		mImpl->mBitStream.insert(mImpl->mBitStream.end(), characterCountIndicator.begin(), characterCountIndicator.end());
+		mImpl->mBitStream.insert(mImpl->mBitStream.end(), dataBits.begin(), dataBits.end());
+	}
+	else
+		throw std::invalid_argument("Data bit stream would exceed the symbol's capacity");
+}
+
+std::vector<std::vector<bool>> QR::QREncoder::generateMatrix()
+{
+	using std::vector; using std::tuple; using std::bitset; using std::get;
+
+	ValidateArguments(mImpl->mType, mImpl->mVersion, mImpl->mLevel);
+
+	vector<vector<bool>> result(GetSymbolSize(mImpl->mType, mImpl->mVersion), vector<bool>(GetSymbolSize(mImpl->mType, mImpl->mVersion))), mask = GetDataRegionMask(mImpl->mType, mImpl->mVersion);
+	vector<Symbol> maskedSymbols;
+	vector<unsigned> maskedSymbolScores;
+	BlockLayoutVector layouts = GetBlockLayout(mImpl->mType, mImpl->mVersion, mImpl->mLevel);
+	vector<vector<bitset<8>>> dataBlocks, errorCorrectionBlocks;
+	typename decltype(mImpl->mBitStream)::size_type bitIndex = 0;
+	int currentRow = GetSymbolSize(mImpl->mType, mImpl->mVersion) - 1, currentColumn = currentRow, delta = -1;
+	unsigned quietZoneWidth = mImpl->mType == SymbolType::MICRO_QR ? 2 : 4;
+	unsigned dataModuleCount = GetDataModuleCount(mImpl->mType, mImpl->mVersion) - GetRemainderBitCount(mImpl->mType, mImpl->mVersion) - GetErrorCorrectionCodewordCount(mImpl->mType, mImpl->mVersion, mImpl->mLevel) * 8;
+	size_t maskId;
+
+	DrawFinderPattern(result, 0, 0);
+	if (mImpl->mType != SymbolType::MICRO_QR)
+	{
+		DrawFinderPattern(result, 0, GetSymbolSize(mImpl->mType, mImpl->mVersion) - 7);
+		DrawFinderPattern(result, GetSymbolSize(mImpl->mType, mImpl->mVersion) - 7, 0);
+		DrawAlignmentPatterns(result, mImpl->mVersion);
+	}
+	DrawTimingPatterns(result, mImpl->mType, mImpl->mVersion);
+
+	//Add terminator and pad codewords
+	if (mImpl->mBitStream.size() <= dataModuleCount)
+	{
+		auto terminator = GetTerminator(mImpl->mType, mImpl->mVersion);
+
+		mImpl->mBitStream.insert(mImpl->mBitStream.end(), terminator.begin(), terminator.begin() + std::min(dataModuleCount - mImpl->mBitStream.size(), terminator.size()));
+
+		if (mImpl->mBitStream.size() < dataModuleCount && mImpl->mBitStream.size() % 8)
+		{
+			mImpl->mBitStream.resize(mImpl->mBitStream.size() - mImpl->mBitStream.size() % 8 + 8);
+
+			//If I got past the limit after resizing to an 8 bit boundary, then it must be because of the 4 bit codeword in M1 or M3 symbols
+			if (mImpl->mBitStream.size() > dataModuleCount)
+				mImpl->mBitStream.resize(dataModuleCount);
+		}
+
+		if (mImpl->mBitStream.size() < dataModuleCount)
+		{
+			vector<vector<bool>> padCodewords;
+			typename decltype(padCodewords)::size_type counter = 0;
+
+			if (mImpl->mType == SymbolType::MICRO_QR && (mImpl->mVersion == 1 || mImpl->mVersion == 3))
+				padCodewords = { { 0, 0, 0, 0 } }; //Pad codeword for M1 and M3
+			else
+				padCodewords = { { 1, 1, 1, 0, 1, 1, 0, 0 }, { 0, 0, 0, 1, 0, 0, 0, 1 } };
+
+			while (mImpl->mBitStream.size() < dataModuleCount)
+				mImpl->mBitStream.insert(mImpl->mBitStream.end(), padCodewords[counter % padCodewords.size()].begin(), padCodewords[counter % padCodewords.size()].end()), ++counter;
+		}
+	}
+	else
+		throw std::length_error("Message exceeds symbol capacity");
+
+	//Split bit stream into data blocks and generate the corresponding error correction blocks
+	std::sort(layouts.begin(), layouts.end(), [](const decltype(layouts)::value_type &lhs, const decltype(layouts)::value_type &rhs) -> bool { return get<1>(lhs) < get<1>(rhs); });
+	for (const auto &blockLayout : layouts)
+	{
+		typename decltype(dataBlocks)::value_type block(get<2>(blockLayout)), errorBlock;
+		auto &generatorPolynomial = GetPolynomialCoefficientExponents(get<1>(blockLayout) - get<2>(blockLayout));
+		unsigned n = get<2>(blockLayout);
+
+		for (auto &codeword : block)
+		{
+			typename decltype(mImpl->mBitStream)::size_type startingBit = codeword.size();
+
+			if (mImpl->mType == SymbolType::MICRO_QR && (mImpl->mVersion == 1 || mImpl->mVersion == 3) && &codeword == &block.back())
+				startingBit = 4;
+
+			for (typename decltype(mImpl->mBitStream)::size_type i = startingBit; i--;)
+				codeword[i] = mImpl->mBitStream[bitIndex++];
+		}
+
+		errorBlock = block;
+		errorBlock.resize(get<1>(blockLayout));
+
+		while (n--)
+		{
+			auto current = errorBlock.front().to_ulong();
+
+			errorBlock.erase(errorBlock.begin());
+
+			if (current)
+			{
+				current = GetAlphaExponent(current);
+
+				for (unsigned i = 0; i < generatorPolynomial.size(); ++i)
+				{
+					auto exponentSum = current + generatorPolynomial[i];
+
+					if (exponentSum > 255)
+						exponentSum %= 255;
+
+					errorBlock[i] = errorBlock[i].to_ulong() ^ GetAlphaValue(exponentSum);
+				}
+			}
+		}
+
+		dataBlocks.resize(dataBlocks.size() + get<0>(blockLayout), block);
+		errorCorrectionBlocks.resize(errorCorrectionBlocks.size() + get<0>(blockLayout), errorBlock);
+	}
+
+	//Place bits in symbol
+	for (const decltype(dataBlocks) &blocks : { std::ref(dataBlocks), std::ref(errorCorrectionBlocks) })
+	{
+		auto maxLength = std::max_element(blocks.begin(), blocks.end(), [](const decltype(dataBlocks)::value_type &lhs, const decltype(dataBlocks)::value_type &rhs) { return lhs.size() < rhs.size(); })->size();
+
+		for (decltype(maxLength) codewordIndex = 0; codewordIndex < maxLength; ++codewordIndex)
+		{
+			for (const auto &block : blocks)
+			{
+				if (codewordIndex < block.size())
+				{
+					auto startingBit = block[codewordIndex].size();
+
+					if (mImpl->mType == SymbolType::MICRO_QR && (mImpl->mVersion == 1 || mImpl->mVersion == 3) && &block[codewordIndex] == &block.back() && &blocks == &dataBlocks)
+						startingBit = 4;
+
+					for (auto bitIndex = startingBit; bitIndex;)
+					{
+						if (!mask[currentRow][currentColumn])
+							result[currentRow][currentColumn] = block[codewordIndex][--bitIndex];
+
+						if (mImpl->mType == SymbolType::MICRO_QR && currentColumn % 2 ||
+							mImpl->mType == SymbolType::QR && currentColumn > 6 && currentColumn % 2 ||
+							mImpl->mType == SymbolType::QR && currentColumn < 6 && !(currentColumn % 2))
+						{
+							if (!currentRow && delta != 1)
+								delta = 1, currentColumn -= 2;
+							else
+								if (currentRow == GetSymbolSize(mImpl->mType, mImpl->mVersion) - 1 && delta != -1)
+									delta = -1, currentColumn -= 2;
+								else
+									currentRow += delta;
+
+							++currentColumn;
+
+							if (currentColumn == 6 && mImpl->mType != SymbolType::MICRO_QR)
+								currentColumn = 5;
+						}
+						else
+							--currentColumn;
+					}
+				}
+			}
+		}
+	}
+
+	for (unsigned maskId = 0, sz = mImpl->mType == SymbolType::MICRO_QR ? 4 : 8; maskId < sz; ++maskId)
+	{
+		maskedSymbols.push_back(result);
+
+		for (Symbol::size_type i = 0, sz = maskedSymbols.back().size(); i < sz; ++i)
+			for (Symbol::value_type::size_type j = 0, sz = maskedSymbols.back()[i].size(); j < sz; ++j)
+				if (!mask[i][j])
+					maskedSymbols.back()[i][j] = maskedSymbols.back()[i][j] ^ GetMaskBit(mImpl->mType, maskId, i, j);
+
+		maskedSymbolScores.push_back(GetSymbolRating(maskedSymbols.back(), mImpl->mType));
+	}
+
+	if (mImpl->mType == SymbolType::QR)
+		maskId = std::min_element(maskedSymbolScores.begin(), maskedSymbolScores.end()) - maskedSymbolScores.begin();
+	else
+		maskId = std::max_element(maskedSymbolScores.begin(), maskedSymbolScores.end()) - maskedSymbolScores.begin();
+
+	result = maskedSymbols[maskId];
+
+	DrawFormatInformation(result, mImpl->mType, mImpl->mVersion, mImpl->mLevel, maskId);
+	if (mImpl->mVersion >= 7)
+		DrawVersionInformation(result, mImpl->mType, mImpl->mVersion);
+
+	//Add quiet zone
+	for (auto &row : result)
+	{
+		row.insert(row.begin(), quietZoneWidth, false);
+		row.insert(row.end(), quietZoneWidth, false);
+	}
+
+	for (unsigned i = 0; i < quietZoneWidth; ++i)
+	{
+		result.insert(result.begin(), std::vector<bool>(GetSymbolSize(mImpl->mType, mImpl->mVersion) + quietZoneWidth * 2));
+		result.insert(result.end(), std::vector<bool>(GetSymbolSize(mImpl->mType, mImpl->mVersion) + quietZoneWidth * 2));
+	}
+
+	return result;
+}
+
+template void QR::QREncoder::addCharacters<std::string_view::value_type>(std::basic_string_view<std::string_view::value_type> message, Mode mode);
+template void QR::QREncoder::addCharacters<std::wstring_view::value_type>(std::basic_string_view<std::wstring_view::value_type> message, Mode mode);

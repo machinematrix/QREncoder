@@ -167,4 +167,5 @@ TEST(IsKanji, General)
 	EXPECT_TRUE(QR::IsKanji(0xEBBF));
 	EXPECT_FALSE(QR::IsKanji(0xEBC0));
 	EXPECT_FALSE(QR::IsKanji(0xFFFF));
+	EXPECT_TRUE(QR::IsKanji(0x88AE));
 }

@@ -119,6 +119,11 @@ int main(int argc, char **argv)
 	try
 	{
 		output << QRToBMP(QR::Encode<char>(message, type.value(), version.value(), level.value(), modeRanges), 4);
+		/*QR::QREncoder code(QR::SymbolType::QR, 1, QR::ErrorCorrectionLevel::L);
+		code.addCharacters<char>("1234", QR::Mode::NUMERIC);
+		code.addCharacters<char>("45", QR::Mode::NUMERIC);
+		code.addCharacters<char>("\xAF\x88", QR::Mode::KANJI);
+		output << QRToBMP(code.generateMatrix(), 4);*/
 	}
 	catch (const std::length_error &e)
 	{
