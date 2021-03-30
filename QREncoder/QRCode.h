@@ -18,21 +18,20 @@ namespace QR
 	template <typename CharacterType>
 	std::vector<std::vector<bool>> Encode(std::basic_string_view<CharacterType> message, SymbolType type, std::uint8_t version, ErrorCorrectionLevel level, Mode mode);
 
-	class QREncoder
+	class Encoder
 	{
 		struct Impl;
 		std::unique_ptr<Impl> mImpl;
 	public:
-		QREncoder(SymbolType type, unsigned version, ErrorCorrectionLevel level);
-		QREncoder(const QREncoder&);
-		QREncoder(QREncoder&&) = default;
-		QREncoder& operator=(const QREncoder&);
-		QREncoder& operator=(QREncoder&&) = default;
-		~QREncoder();
+		Encoder(SymbolType type, unsigned version, ErrorCorrectionLevel level);
+		Encoder(const Encoder&);
+		Encoder(Encoder&&) noexcept;
+		Encoder& operator=(const Encoder&);
+		Encoder& operator=(Encoder&&) noexcept;
+		~Encoder();
 
-		template <typename CharacterType>
-		void addCharacters(std::basic_string_view<CharacterType> message, Mode mode);
-		std::vector<std::vector<bool>> generateMatrix();
+		void addCharacters(std::string_view message, Mode mode);
+		std::vector<std::vector<bool>> generateMatrix() const;
 	};
 }
 

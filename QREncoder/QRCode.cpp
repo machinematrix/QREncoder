@@ -343,6 +343,61 @@ namespace QR
 			return result;
 		}
 
+		//From table 3, page 23
+		std::vector<bool> GetCharacterCountIndicator(SymbolType type, std::uint8_t version, Mode mode, size_t characterCount)
+		{
+			using TableType = std::array<std::array<unsigned, 4>, 4>;
+			static const TableType microModeLengths = { { { 3 }, { 4, 3 }, { 5, 4, 4, 3 }, { 6, 5, 5, 4 } } };
+			static const TableType modeLengths = { { { 10, 9, 8, 8 }, { 12, 11, 16, 10 }, { 14, 13, 16, 12 } } };
+			unsigned length = 0;
+			std::vector<bool> result;
+
+			if (type == SymbolType::MICRO_QR)
+				length = microModeLengths[version - 1][static_cast<size_t>(mode)];
+			else
+			{
+				if (version <= 9)
+					length = modeLengths[0][static_cast<size_t>(mode)];
+				else
+					if (version <= 26)
+						length = modeLengths[1][static_cast<size_t>(mode)];
+					else
+						length = modeLengths[2][static_cast<size_t>(mode)];
+			}
+
+			result.resize(length);
+
+			for (decltype(result)::size_type i = 0; i < result.size(); ++i)
+				result.at(i) = characterCount & 1 << (length - 1) >> i ? true : false;
+
+			return result;
+		}
+
+		//Returns bit sequence containing ECI mode indicator and ECI designator.
+		std::vector<bool> GetECISequence(unsigned assignmentNumber)
+		{
+			std::vector<bool> result = { 0, 1, 1, 1 };
+
+			if (assignmentNumber <= 127)
+				result.resize(result.size() + 8);
+			else
+				if (assignmentNumber <= 16383)
+					result.resize(result.size() + 16);
+				else
+					if (assignmentNumber <= 999999)
+						result.resize(result.size() + 24);
+					else
+						throw std::invalid_argument("Invalid ECI assignment number, max value is 999999");
+
+			for (decltype(result)::size_type i = 4, sz = (result.size() - 4) / 8 - 1; i < sz + 4; ++i)
+				result[i] = 1;
+
+			for (decltype(result)::size_type codewords = (result.size() - 4) / 8, bits = result.size() - 4 - codewords, i = 4 + codewords; i < result.size(); ++i)
+				result[i] = assignmentNumber & 1 << (bits - 1) >> (i - 4 - codewords);
+
+			return result;
+		}
+
 		//version parameter is only used for Micro QR
 		std::vector<bool> GetTerminator(SymbolType type, std::uint8_t version)
 		{
@@ -492,36 +547,6 @@ namespace QR
 			};
 
 			return versionInformation[version - 7];
-		}
-
-		//From table 3, page 23
-		std::vector<bool> GetCharacterCountIndicator(SymbolType type, std::uint8_t version, Mode mode, size_t characterCount)
-		{
-			using TableType = std::array<std::array<unsigned, 4>, 4>;
-			static const TableType microModeLengths = { { { 3 }, { 4, 3 }, { 5, 4, 4, 3 }, { 6, 5, 5, 4 } } };
-			static const TableType modeLengths = { { { 10, 9, 8, 8 }, { 12, 11, 16, 10 }, { 14, 13, 16, 12 } } };
-			unsigned length = 0;
-			std::vector<bool> result;
-
-			if (type == SymbolType::MICRO_QR)
-				length = microModeLengths[version - 1][static_cast<size_t>(mode)];
-			else
-			{
-				if (version <= 9)
-					length = modeLengths[0][static_cast<size_t>(mode)];
-				else
-					if (version <= 26)
-						length = modeLengths[1][static_cast<size_t>(mode)];
-					else
-						length = modeLengths[2][static_cast<size_t>(mode)];
-			}
-
-			result.resize(length);
-
-			for (decltype(result)::size_type i = 0; i < result.size(); ++i)
-				result.at(i) = characterCount & 1 << (length - 1) >> i ? true : false;
-
-			return result;
 		}
 
 		const std::vector<Symbol::size_type>& GetAlignmentPatternCenters(std::uint8_t version)
@@ -1426,163 +1451,188 @@ template std::vector<std::vector<bool>> QR::Encode<std::wstring_view::value_type
 template std::vector<std::vector<bool>> QR::Encode<std::string_view::value_type>(std::basic_string_view<std::string_view::value_type>, SymbolType, std::uint8_t, ErrorCorrectionLevel, Mode);
 template std::vector<std::vector<bool>> QR::Encode<std::wstring_view::value_type>(std::basic_string_view<std::wstring_view::value_type>, SymbolType, std::uint8_t, ErrorCorrectionLevel, Mode);
 
-namespace QR
-{
-}
-
-struct QR::QREncoder::Impl
+struct QR::Encoder::Impl
 {
 public:
 	std::vector<bool> mBitStream;
 	unsigned mVersion;
 	SymbolType mType;
 	ErrorCorrectionLevel mLevel;
-	std::optional<Mode> mLastMode = std::optional<Mode>();
 };
 
-QR::QREncoder::QREncoder(SymbolType type, unsigned version, ErrorCorrectionLevel level)
+QR::Encoder::Encoder(SymbolType type, unsigned version, ErrorCorrectionLevel level)
 	:mImpl(new Impl{ {}, version, type, level })
-{}
+{
+	ValidateArguments(type, version, level);
+}
 
-QR::QREncoder::QREncoder(const QREncoder &other)
+QR::Encoder::Encoder(const Encoder &other)
 	:mImpl(new Impl{ *other.mImpl })
 {}
 
-QR::QREncoder &QR::QREncoder::operator=(const QREncoder &other)
+QR::Encoder::Encoder(Encoder&&) noexcept = default;
+
+QR::Encoder &QR::Encoder::operator=(const Encoder &other)
 {
 	*mImpl = *other.mImpl;
 
 	return *this;
 }
 
-QR::QREncoder::~QREncoder() = default;
+QR::Encoder &QR::Encoder::operator=(Encoder&&) noexcept = default;
 
-template<typename CharacterType>
-void QR::QREncoder::addCharacters(std::basic_string_view<CharacterType> message, Mode mode)
+QR::Encoder::~Encoder() = default;
+
+void QR::Encoder::addCharacters(std::string_view message, Mode mode)
 {
 	using std::get;
-	static const std::regex eciFormat("(\\\\)?\\\\([^]*)");
-	std::vector<bool> modeIndicator, characterCountIndicator, dataBits;
-	std::vector<typename decltype(message)::size_type> slashes;
-	size_t characterCount = 0;
+	static const std::regex eciFormat("(\\\\)?\\\\([^]{0,6})");
+	std::vector<bool> modeIndicator = GetModeIndicator(mImpl->mType, mImpl->mVersion, mode), dataBits;
+	std::vector<std::tuple<size_t, size_t, std::optional<unsigned>>> ranges; //<index, byte count, ECI>
 	unsigned dataModuleCount = GetDataModuleCount(mImpl->mType, mImpl->mVersion) - GetRemainderBitCount(mImpl->mType, mImpl->mVersion) - GetErrorCorrectionCodewordCount(mImpl->mType, mImpl->mVersion, mImpl->mLevel) * 8;
 
-	switch (mode)
+	for (std::regex_iterator<typename decltype(message)::const_iterator> it(message.cbegin(), message.cend(), eciFormat), end; it != end; ++it)
 	{
-		case Mode::NUMERIC:
+		auto &results = *it;
+
+		if (!results[1].matched)
 		{
-			std::vector<CharacterType> digits;
-
-			for (typename decltype(message)::size_type i = 0; i < message.size(); ++i)
+			if (results[2].length() != 6)
+				throw std::invalid_argument("Invalid ECI sequence");
+			try
 			{
-				digits.push_back(message[i]);
-
-				if (digits.size() == 3 || i == message.size() - 1 && !digits.empty())
-				{
-					unsigned encodedDigits = ToInteger(digits);
-
-					characterCount += digits.size();
-
-					for (size_t bit = 0, bitCount = digits.size() * 3 + 1; bit < bitCount; ++bit)
-						dataBits.push_back(encodedDigits & 1 << (bitCount - 1) >> bit);
-
-					digits.clear();
-				}
-			}
-
-			break;
-		}
-
-		case Mode::ALPHANUMERIC:
-		{
-			std::vector<CharacterType> characters;
-
-			if (mImpl->mType == SymbolType::MICRO_QR && mImpl->mVersion < 2)
-				throw std::invalid_argument("Alphanumeric mode is not supported in M1 symbols");
-
-			for (typename decltype(message)::size_type i = 0; i < message.size(); ++i)
-			{
-				characters.push_back(message[i]);
-
-				if (characters.size() == 2 || i == message.size() - 1 && !characters.empty())
-				{
-					unsigned encodedCharacters = characters.size() == 2 ? GetAlphanumericCode(characters[0]) * 45 + GetAlphanumericCode(characters[1]) : GetAlphanumericCode(characters[0]);
-					
-					characterCount += characters.size();
-
-					for (size_t bit = 0, bitCount = characters.size() == 2 ? 11 : 6; bit < bitCount; ++bit)
-						dataBits.push_back(encodedCharacters & 1 << (bitCount - 1) >> bit);
-
-					characters.clear();
-				}
-			}
-
-			break;
-		}
-
-		case Mode::BYTE:
-		{
-			if (mImpl->mType == SymbolType::MICRO_QR && mImpl->mVersion < 3)
-				throw std::invalid_argument("Byte mode is not supported in M1 and M2 symbols");
-
-			for (unsigned i = 0; i < message.size() * sizeof(CharacterType); ++i, ++characterCount)
-			{
-				for (unsigned bit = 0; bit < 8; ++bit)
-					dataBits.push_back(*(reinterpret_cast<const std::uint8_t*>(message.data()) + i) & 1 << 7 >> bit);
-			}
-
-			break;
-		}
-
-		case Mode::KANJI:
-		{
-			if (mImpl->mType == SymbolType::MICRO_QR && mImpl->mVersion < 3)
-				throw std::invalid_argument("Kanji mode is not supported in M1 and M2 symbols");
-
-			for (typename decltype(message)::size_type i = 0; i < message.size() * sizeof(CharacterType); i += 2, ++characterCount)
-			{
-				std::uint16_t kanjiCharacter = *reinterpret_cast<const std::uint16_t*>(reinterpret_cast<const std::uint8_t*>(message.data()) + i);
-
-				if (i == message.size() * sizeof(CharacterType) - 1) //Odd number of character bytes in message
-					throw std::invalid_argument("Invalid Kanji sequence");
-
-				if (!IsKanji(kanjiCharacter))
-					throw std::invalid_argument("Character can't be encoded in Kanji mode");
-
-				if (kanjiCharacter >= 0x8140 && kanjiCharacter <= 0x9FFC)
-					kanjiCharacter -= 0x8140;
+				if (!ranges.empty())
+					get<1>(ranges.back()) = results.position() - get<0>(ranges.back());
 				else
-					if (kanjiCharacter >= 0xE040 && kanjiCharacter <= 0xEBBF)
-						kanjiCharacter -= 0xC140;
+					if (results.position())
+						ranges.emplace_back(0, results.position(), std::optional<unsigned>());
 
-				kanjiCharacter = (kanjiCharacter >> 8) * 0xC0 + (kanjiCharacter & 0xFF);
-
-				for (unsigned bit = 0; bit < 13; ++bit)
-					dataBits.push_back(kanjiCharacter & 1 << 12 >> bit);
+				ranges.emplace_back(results.position() + results.length(), message.size() - (results.position() + results.length()), std::stoul(results[2].str()));
 			}
-
-			break;
+			catch (const std::invalid_argument&)
+			{
+				throw std::invalid_argument("Invalid ECI sequence");
+			}
 		}
 	}
 
-	if (mode != mImpl->mLastMode)
+	if (ranges.empty())
+		ranges.emplace_back(0, message.size(), std::optional<unsigned>());
+
+	for (const auto &range : ranges)
 	{
-		modeIndicator = GetModeIndicator(mImpl->mType, mImpl->mVersion, mode);
-		characterCountIndicator = GetCharacterCountIndicator(mImpl->mType, mImpl->mVersion, mode, characterCount);
-		mImpl->mLastMode = mode;
+		auto characterCount = GetCharacterCountIndicator(mImpl->mType, mImpl->mVersion, mode, mode == Mode::KANJI ? get<1>(range) / 2 : get<1>(range));
+
+		if (mode == Mode::KANJI && get<1>(range) % 2)
+			throw std::invalid_argument("Invalid Kanji sequence");
+
+		if (auto eci = get<2>(range))
+		{
+			auto eciBits = GetECISequence(eci.value());
+
+			dataBits.insert(dataBits.end(), eciBits.begin(), eciBits.end());
+		}
+
+		dataBits.insert(dataBits.end(), modeIndicator.begin(), modeIndicator.end());
+		dataBits.insert(dataBits.end(), characterCount.begin(), characterCount.end());
+
+		switch (mode)
+		{
+			case Mode::NUMERIC:
+			{
+				std::vector<decltype(message)::value_type> digits;
+
+				for (typename decltype(message)::size_type i = get<0>(range); i < get<0>(range) + get<1>(range); ++i)
+				{
+					digits.push_back(message[i]);
+
+					if (digits.size() == 3 || i == (get<0>(range) + get<1>(range)) - 1 && !digits.empty())
+					{
+						unsigned encodedDigits = ToInteger(digits);
+
+						for (size_t bit = 0, bitCount = digits.size() * 3 + 1; bit < bitCount; ++bit)
+							dataBits.push_back(encodedDigits & 1 << (bitCount - 1) >> bit);
+
+						digits.clear();
+					}
+				}
+
+				break;
+			}
+
+			case Mode::ALPHANUMERIC:
+			{
+				std::vector<decltype(message)::value_type> characters;
+
+				if (mImpl->mType == SymbolType::MICRO_QR && mImpl->mVersion < 2)
+					throw std::invalid_argument("Alphanumeric mode is not supported in M1 symbols");
+
+				for (typename decltype(message)::size_type i = get<0>(range); i < get<0>(range) + get<1>(range); ++i)
+				{
+					characters.push_back(message[i]);
+
+					if (characters.size() == 2 || i == (get<0>(range) + get<1>(range)) - 1 && !characters.empty())
+					{
+						unsigned encodedCharacters = characters.size() == 2 ? GetAlphanumericCode(characters[0]) * 45 + GetAlphanumericCode(characters[1]) : GetAlphanumericCode(characters[0]);
+
+						for (size_t bit = 0, bitCount = characters.size() == 2 ? 11 : 6; bit < bitCount; ++bit)
+							dataBits.push_back(encodedCharacters & 1 << (bitCount - 1) >> bit);
+
+						characters.clear();
+					}
+				}
+
+				break;
+			}
+
+			case Mode::BYTE:
+			{
+				if (mImpl->mType == SymbolType::MICRO_QR && mImpl->mVersion < 3)
+					throw std::invalid_argument("Byte mode is not supported in M1 and M2 symbols");
+
+				for (size_t i = get<0>(range); i < get<0>(range) + get<1>(range); ++i)
+					for (size_t bit = 0; bit < 8; ++bit)
+						dataBits.push_back(*(message.data() + i) & 1 << 7 >> bit);
+
+				break;
+			}
+
+			case Mode::KANJI:
+			{
+				if (mImpl->mType == SymbolType::MICRO_QR && mImpl->mVersion < 3)
+					throw std::invalid_argument("Kanji mode is not supported in M1 and M2 symbols");
+
+				for (typename decltype(message)::size_type i = get<0>(range); i < get<0>(range) + get<1>(range); i += 2)
+				{
+					std::uint16_t kanjiCharacter = *reinterpret_cast<const std::uint16_t*>(message.data() + i);
+
+					if (!IsKanji(kanjiCharacter))
+						throw std::invalid_argument("Character can't be encoded in Kanji mode");
+
+					if (kanjiCharacter >= 0x8140 && kanjiCharacter <= 0x9FFC)
+						kanjiCharacter -= 0x8140;
+					else
+						if (kanjiCharacter >= 0xE040 && kanjiCharacter <= 0xEBBF)
+							kanjiCharacter -= 0xC140;
+
+					kanjiCharacter = (kanjiCharacter >> 8) * 0xC0 + (kanjiCharacter & 0xFF);
+
+					for (size_t bit = 0; bit < 13; ++bit)
+						dataBits.push_back(kanjiCharacter & 1 << 12 >> bit);
+				}
+
+				break;
+			}
+		}
 	}
 
-	if (mImpl->mBitStream.size() + modeIndicator.size() + characterCountIndicator.size() + dataBits.size() <= dataModuleCount)
-	{
-		mImpl->mBitStream.insert(mImpl->mBitStream.end(), modeIndicator.begin(), modeIndicator.end());
-		mImpl->mBitStream.insert(mImpl->mBitStream.end(), characterCountIndicator.begin(), characterCountIndicator.end());
+	if (mImpl->mBitStream.size() + dataBits.size() <= dataModuleCount)
 		mImpl->mBitStream.insert(mImpl->mBitStream.end(), dataBits.begin(), dataBits.end());
-	}
 	else
-		throw std::invalid_argument("Data bit stream would exceed the symbol's capacity");
+		throw std::length_error("Data bit stream would exceed the symbol's capacity");
 }
 
-std::vector<std::vector<bool>> QR::QREncoder::generateMatrix()
+std::vector<std::vector<bool>> QR::Encoder::generateMatrix() const
 {
 	using std::vector; using std::tuple; using std::bitset; using std::get;
 
@@ -1773,6 +1823,3 @@ std::vector<std::vector<bool>> QR::QREncoder::generateMatrix()
 
 	return result;
 }
-
-template void QR::QREncoder::addCharacters<std::string_view::value_type>(std::basic_string_view<std::string_view::value_type> message, Mode mode);
-template void QR::QREncoder::addCharacters<std::wstring_view::value_type>(std::basic_string_view<std::wstring_view::value_type> message, Mode mode);

@@ -15,6 +15,14 @@ namespace QR
 	template <typename CharacterType> std::uint16_t ToInteger(const std::vector<CharacterType>&);
 	bool IsKanji(std::uint16_t);
 	unsigned GetSymbolRating(const std::vector<std::vector<bool>> &symbol, SymbolType type);
+	std::vector<bool> GetECISequence(unsigned assignmentNumber);
+}
+
+TEST(GetECISequence, General)
+{
+	EXPECT_EQ(QR::GetECISequence(9), (std::vector<bool>{ 0, 1, 1, 1, 0, 0, 0, 0, 1, 0, 0, 1 }));
+	EXPECT_EQ(QR::GetECISequence(16382), (std::vector<bool>{ 0, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0 }));
+	EXPECT_EQ(QR::GetECISequence(999997), (std::vector<bool>{ 0, 1, 1, 1, 1, 1, 0, 0, 1, 1, 1, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 1, 1, 1, 1, 0, 1 }));
 }
 
 TEST(GetSymbolRating, General)
