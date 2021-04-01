@@ -1518,6 +1518,9 @@ void QR::Encoder::addCharacters(std::string_view message, Mode mode)
 
 	if (ranges.empty())
 		ranges.emplace_back(0, message.size(), std::optional<unsigned>());
+	else
+		if (mImpl->mType == QR::SymbolType::MICRO_QR)
+			throw std::invalid_argument("ECI is not supported in Micro QR symbols");
 
 	for (const auto &range : ranges)
 	{

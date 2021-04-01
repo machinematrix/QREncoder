@@ -18,6 +18,13 @@ namespace QR
 	std::vector<bool> GetECISequence(unsigned assignmentNumber);
 }
 
+TEST(Encoder_addCharacters, ECI)
+{
+	QR::Encoder encoder(QR::SymbolType::MICRO_QR, 4, QR::ErrorCorrectionLevel::L);
+
+	EXPECT_THROW(encoder.addCharacters("\\000009\xC1\xC2\xC3\xC4\xC5", QR::Mode::BYTE), std::invalid_argument);
+}
+
 TEST(Encoder_addCharacters, NumericMode)
 {
 	QR::Encoder encoder(QR::SymbolType::QR, 1, QR::ErrorCorrectionLevel::L);
@@ -39,7 +46,7 @@ TEST(Encoder_addCharacters, KanjiMode)
 	QR::Encoder micro2(QR::SymbolType::MICRO_QR, 2, QR::ErrorCorrectionLevel::L);
 
 	EXPECT_THROW(encoder.addCharacters("\xAE\x8A\xFF", QR::Mode::KANJI), std::invalid_argument); //odd byte count
-	EXPECT_NO_THROW(encoder.addCharacters("\xAE\x8A", QR::Mode::KANJI), std::invalid_argument); //ok
+	EXPECT_NO_THROW(encoder.addCharacters("\xAE\x8A", QR::Mode::KANJI)); //ok
 	EXPECT_THROW(encoder.addCharacters("\xFF\xFF", QR::Mode::KANJI), std::invalid_argument); //not Kanji
 	EXPECT_THROW(micro1.addCharacters("\xAE\x8A", QR::Mode::KANJI), std::invalid_argument); //Kanji not supported
 	EXPECT_THROW(micro2.addCharacters("\xAE\x8A", QR::Mode::KANJI), std::invalid_argument); //Kanji not supported
