@@ -1481,10 +1481,11 @@ QR::Encoder::~Encoder() = default;
 void QR::Encoder::addCharacters(std::string_view message, Mode mode)
 {
 	using std::get;
-	static const std::regex eciFormat("(\\\\)?\\\\([^]{0,6})");
+	static const std::regex eciFormat("(\\\\)?\\\\([^\\\\]{0,6})");
 	std::vector<bool> modeIndicator = GetModeIndicator(mImpl->mType, mImpl->mVersion, mode), dataBits;
 	std::vector<std::tuple<size_t, size_t, std::optional<unsigned>>> ranges; //<index, byte count, ECI>
 	unsigned dataModuleCount = GetDataModuleCount(mImpl->mType, mImpl->mVersion) - GetRemainderBitCount(mImpl->mType, mImpl->mVersion) - GetErrorCorrectionCodewordCount(mImpl->mType, mImpl->mVersion, mImpl->mLevel) * 8;
+	unsigned doubleSlashCount = 0;
 
 	for (std::regex_iterator<typename decltype(message)::const_iterator> it(message.cbegin(), message.cend(), eciFormat), end; it != end; ++it)
 	{
@@ -1509,6 +1510,8 @@ void QR::Encoder::addCharacters(std::string_view message, Mode mode)
 				throw std::invalid_argument("Invalid ECI sequence");
 			}
 		}
+		else
+			++doubleSlashCount;
 	}
 
 	if (ranges.empty())
@@ -1519,7 +1522,7 @@ void QR::Encoder::addCharacters(std::string_view message, Mode mode)
 
 	for (const auto &range : ranges)
 	{
-		auto characterCount = GetCharacterCountIndicator(mImpl->mType, mImpl->mVersion, mode, mode == Mode::KANJI ? get<1>(range) / 2 : get<1>(range));
+		auto characterCount = GetCharacterCountIndicator(mImpl->mType, mImpl->mVersion, mode, mode == Mode::KANJI ? get<1>(range) / 2 : get<1>(range) - doubleSlashCount);
 
 		if (mode == Mode::KANJI && get<1>(range) % 2)
 			throw std::invalid_argument("Invalid Kanji sequence");
@@ -1589,8 +1592,13 @@ void QR::Encoder::addCharacters(std::string_view message, Mode mode)
 					throw std::invalid_argument("Byte mode is not supported in M1 and M2 symbols");
 
 				for (size_t i = get<0>(range); i < get<0>(range) + get<1>(range); ++i)
+				{
 					for (size_t bit = 0; bit < 8; ++bit)
 						dataBits.push_back(*(message.data() + i) & 1 << 7 >> bit);
+
+					if (message[i] == 0x5C)
+						++i;
+				}
 
 				break;
 			}
