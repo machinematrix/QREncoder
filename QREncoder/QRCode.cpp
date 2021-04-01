@@ -671,50 +671,47 @@ namespace QR
 		template<typename CharacterType>
 		std::uint8_t GetAlphanumericCode(CharacterType character)
 		{
-			static const std::locale loc;
 			std::uint8_t result = 0;
 
-			if (std::isdigit(character, loc))
-				result = character - static_cast<CharacterType>('0');
+			if (character >= 0x30 && character <= 0x39)
+				result = character - 0x30;
+			else if (character >= 0x41 && character <= 0x5A)
+				result = character - 0x41 + 10;
+			else if (character >= 0x61 && character <= 0x7A)
+				result = character - 0x61 + 10;
 			else
-				if (std::isalpha(character, loc))
-					if (std::isupper(character, loc))
-						result = character - static_cast<CharacterType>('A') + 10;
-					else
-						result = character - static_cast<CharacterType>('a') + 10;
-				else
-					switch (character)
-					{
-						case static_cast<CharacterType>(' '):
-							result = 36;
-							break;
-						case static_cast<CharacterType>('$'):
-							result = 37;
-							break;
-						case static_cast<CharacterType>('%'):
-							result = 38;
-							break;
-						case static_cast<CharacterType>('*'):
-							result = 39;
-							break;
-						case static_cast<CharacterType>('+'):
-							result = 40;
-							break;
-						case static_cast<CharacterType>('-'):
-							result = 41;
-							break;
-						case static_cast<CharacterType>('.'):
-							result = 42;
-							break;
-						case static_cast<CharacterType>('/'):
-							result = 43;
-							break;
-						case static_cast<CharacterType>(':'):
-							result = 44;
-							break;
-						default:
-							throw std::invalid_argument("Character can't be encoded in alphanumeric mode");
-					}
+				switch (character)
+				{
+					case 0x20: // space
+						result = 36;
+						break;
+					case 0x24: // $
+						result = 37;
+						break;
+					case 0x25: // %
+						result = 38;
+						break;
+					case 0x2A: // *
+						result = 39;
+						break;
+					case 0x2B: // +
+						result = 40;
+						break;
+					case 0x2D: // -
+						result = 41;
+						break;
+					case 0x2E: // .
+						result = 42;
+						break;
+					case 0x2F: // /
+						result = 43;
+						break;
+					case 0x3A: // :
+						result = 44;
+						break;
+					default:
+						throw std::invalid_argument("Character can't be encoded in alphanumeric mode");
+				}
 
 			return result;
 		}
@@ -907,16 +904,14 @@ namespace QR
 		template <typename CharacterType>
 		std::uint16_t ToInteger(const std::vector<CharacterType> &characters)
 		{
-			static const std::locale loc;
-			CharacterType zero = 0x30;
 			std::uint16_t result = 0, multiplier = 1;
 
 			for (typename std::vector<CharacterType>::const_reverse_iterator it = characters.crbegin(); it != characters.crend(); ++it, multiplier *= 10)
 			{
-				if (!std::isdigit(*it, loc))
+				if (*it < 0x30 || *it > 0x39)
 					throw std::invalid_argument("Character can't be encoded in numeric mode");
 
-				result += (*it - zero) * multiplier;
+				result += (*it - 0x30) * multiplier;
 			}
 
 			return result;
