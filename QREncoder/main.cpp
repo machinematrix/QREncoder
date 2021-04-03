@@ -1,8 +1,10 @@
+#define _SILENCE_CXX17_CODECVT_HEADER_DEPRECATION_WARNING
 #include <fstream>
 #include <iostream>
 #include <unordered_map>
 #include <regex>
 #include <optional>
+#include <codecvt>
 #include "Image.h"
 #include "QRCode.h"
 
@@ -90,7 +92,9 @@ int wmain(int argc, wchar_t **argv)
 
 				if ((modeIt = modes.find(argument)) != modes.end())
 				{
-					encoder.addCharacters(argv[i + 1], modeIt->second);
+					std::string utf8Message = std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>, wchar_t>{}.to_bytes(argv[i + 1]);
+
+					encoder.addCharacters(utf8Message, modeIt->second);
 					++i;
 				}
 				else if (argument == L"-output")

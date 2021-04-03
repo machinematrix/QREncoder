@@ -52,6 +52,24 @@ TEST(Encoder_addCharacters, KanjiMode)
 	EXPECT_THROW(micro2.addCharacters("\xAE\x8A", QR::Mode::KANJI), std::invalid_argument); //Kanji not supported
 }
 
+TEST(Encoder_addCharacters, SymbolCapacity)
+{
+	QR::Encoder m1(QR::SymbolType::MICRO_QR, 1, QR::ErrorCorrectionLevel::ERROR_DETECTION_ONLY);
+	QR::Encoder m2l(QR::SymbolType::MICRO_QR, 2, QR::ErrorCorrectionLevel::L);
+	QR::Encoder m2m(QR::SymbolType::MICRO_QR, 2, QR::ErrorCorrectionLevel::M);
+
+	EXPECT_THROW(m1.addCharacters("012345", QR::Mode::NUMERIC), std::length_error);
+	EXPECT_THROW(m1.addCharacters("01234567890", QR::Mode::NUMERIC), std::length_error);
+	EXPECT_THROW(m1.addCharacters("012345678", QR::Mode::NUMERIC), std::length_error);
+}
+
+TEST(Encoder_addCharacters, OddKanjiByteCount)
+{
+	QR::Encoder encoder(QR::SymbolType::QR, 1, QR::ErrorCorrectionLevel::L);
+
+	EXPECT_THROW(encoder.addCharacters("\xBE\x8C\xBE", QR::Mode::KANJI), std::invalid_argument);
+}
+
 TEST(GetECISequence, General)
 {
 	EXPECT_EQ(QR::GetECISequence(9), (std::vector<bool>{ 0, 1, 1, 1, 0, 0, 0, 0, 1, 0, 0, 1 }));
@@ -165,42 +183,6 @@ TEST(ToInteger, Remainder)
 	EXPECT_EQ(QR::ToInteger<wchar_t>({ '6', '7' }), 67);
 	EXPECT_EQ(QR::ToInteger<char>({ '8' }), 8);
 	EXPECT_EQ(QR::ToInteger<wchar_t>({ '8' }), 8);
-}
-
-TEST(Encode, SymbolCapacity)
-{
-	EXPECT_THROW(QR::Encode<char>("012345", QR::SymbolType::MICRO_QR, 1, QR::ErrorCorrectionLevel::ERROR_DETECTION_ONLY, QR::Mode::NUMERIC), std::length_error);
-	EXPECT_THROW(QR::Encode<char>("01234567890", QR::SymbolType::MICRO_QR, 2, QR::ErrorCorrectionLevel::L, QR::Mode::NUMERIC), std::length_error);
-	EXPECT_THROW(QR::Encode<char>("012345678", QR::SymbolType::MICRO_QR, 2, QR::ErrorCorrectionLevel::M, QR::Mode::NUMERIC), std::length_error);
-}
-
-TEST(Encode, OutputEquality)
-{
-	std::unordered_map<QR::Mode, std::tuple<std::string_view, std::wstring_view>> inputMap = {
-		{ QR::Mode::NUMERIC, { "01234", L"01234" } },
-		{ QR::Mode::ALPHANUMERIC, { "ABC123$", L"ABC123$" } },
-		{ QR::Mode::BYTE, { "\x16\x59", L"\x5916" } },
-		{ QR::Mode::KANJI, { "\xBE\x8C\xBE\x8C", L"\x8CBE\x8CBE" } }
-	};
-	std::vector<std::uint8_t> versions;
-
-	for (std::uint8_t version = 1; version <= 4; ++version)
-		EXPECT_EQ(QR::Encode(std::get<0>(inputMap.at(QR::Mode::NUMERIC)), QR::SymbolType::MICRO_QR, version, version == 1 ? QR::ErrorCorrectionLevel::ERROR_DETECTION_ONLY : QR::ErrorCorrectionLevel::L, QR::Mode::NUMERIC),
-				  QR::Encode(std::get<1>(inputMap.at(QR::Mode::NUMERIC)), QR::SymbolType::MICRO_QR, version, version == 1 ? QR::ErrorCorrectionLevel::ERROR_DETECTION_ONLY : QR::ErrorCorrectionLevel::L, QR::Mode::NUMERIC));
-
-	for (std::uint8_t version = 1; version <= 40; ++version)
-		versions.push_back(version);
-
-	for (auto mode : { QR::Mode::KANJI, QR::Mode::NUMERIC, QR::Mode::ALPHANUMERIC, QR::Mode::BYTE })
-		std::for_each(std::execution::par, versions.cbegin(), versions.cend(), [mode, &inputMap](std::uint8_t version) {
-		EXPECT_EQ(QR::Encode(std::get<0>(inputMap.at(mode)), QR::SymbolType::QR, version, QR::ErrorCorrectionLevel::L, mode),
-				  QR::Encode(std::get<1>(inputMap.at(mode)), QR::SymbolType::QR, version, QR::ErrorCorrectionLevel::L, mode));
-		});
-}
-
-TEST(Encode, KanjiOddByteCount)
-{
-	EXPECT_THROW(QR::Encode<char>("\xBE\x8C\xBE", QR::SymbolType::QR, 1, QR::ErrorCorrectionLevel::L, QR::Mode::KANJI), std::invalid_argument);
 }
 
 TEST(IsKanji, General)
