@@ -1,3 +1,4 @@
+#define _SILENCE_CXX17_CODECVT_HEADER_DEPRECATION_WARNING
 #include "QRCode.h"
 #include <stdexcept>
 #include <array>
@@ -7,10 +8,9 @@
 #include <tuple>
 #include <bitset>
 #include <algorithm>
-#include <charconv>
 #include <optional>
-#include <locale>
 #include <regex>
+#include <codecvt>
 
 namespace QR
 {
@@ -1636,6 +1636,13 @@ void QR::Encoder::addCharacters(std::string_view message, Mode mode)
 		mImpl->mBitStream.insert(mImpl->mBitStream.end(), dataBits.begin(), dataBits.end());
 	else
 		throw std::length_error("Data bit stream would exceed the symbol's capacity");
+}
+
+void QR::Encoder::addCharacters(std::wstring_view message, Mode mode)
+{
+	std::string utf8Message = std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>, wchar_t>{}.to_bytes(message.data());
+
+	addCharacters(utf8Message, mode);
 }
 
 std::vector<std::vector<bool>> QR::Encoder::generateMatrix() const

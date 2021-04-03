@@ -29,24 +29,24 @@ BMPImage QRToBMP(const std::vector<std::vector<bool>> &code, unsigned multiplier
 	return result;
 }
 
-int main(int argc, char **argv)
+int wmain(int argc, wchar_t **argv)
 {
 	using std::cout;
 	using std::wcout;
 	using std::cerr;
 	using std::endl;
-	std::regex versionFormat("-(M)?([[:digit:]]{1,2})-([LMQH])");
-	std::cmatch results;
-	std::unordered_map<char, QR::ErrorCorrectionLevel> levels = {
-		{ 'L', QR::ErrorCorrectionLevel::L },
-		{ 'M', QR::ErrorCorrectionLevel::M },
-		{ 'Q', QR::ErrorCorrectionLevel::Q },
-		{ 'H', QR::ErrorCorrectionLevel::H }
+	std::wregex versionFormat(L"-(M)?([[:digit:]]{1,2})-([LMQH])");
+	std::wcmatch results;
+	std::unordered_map<wchar_t, QR::ErrorCorrectionLevel> levels = {
+		{ L'L', QR::ErrorCorrectionLevel::L },
+		{ L'M', QR::ErrorCorrectionLevel::M },
+		{ L'Q', QR::ErrorCorrectionLevel::Q },
+		{ L'H', QR::ErrorCorrectionLevel::H }
 	};
-	std::unordered_map<std::string_view, QR::Mode> modes = {
-		{ "-numeric", QR::Mode::NUMERIC },
-		{ "-alpha", QR::Mode::ALPHANUMERIC },
-		{ "-byte", QR::Mode::BYTE }
+	std::unordered_map<std::wstring_view, QR::Mode> modes = {
+		{ L"-numeric", QR::Mode::NUMERIC },
+		{ L"-alpha", QR::Mode::ALPHANUMERIC },
+		{ L"-byte", QR::Mode::BYTE }
 	};
 	int result = 0;
 
@@ -58,10 +58,10 @@ int main(int argc, char **argv)
 			<< "E: Error correction levels. Valid values are L, M, Q, H"
 			<< "Symbol version must be the first argument, the rest of the arguments may appear in any order" << endl;
 	}
-	else if (std::regex_match(argv[1], results, versionFormat) || argv[1] == std::string_view("-M1"))
+	else if (std::regex_match(argv[1], results, versionFormat) || argv[1] == std::wstring_view(L"-M1"))
 	{
 		std::ofstream output;
-		std::string filename;
+		std::wstring filename;
 		QR::SymbolType type;
 		std::uint8_t version;
 		QR::ErrorCorrectionLevel level;
@@ -86,14 +86,14 @@ int main(int argc, char **argv)
 			for (int i = 2; i < argc - 1; ++i)
 			{
 				decltype(modes)::iterator modeIt;
-				std::string_view argument(argv[i]);
+				std::wstring_view argument(argv[i]);
 
 				if ((modeIt = modes.find(argument)) != modes.end())
 				{
 					encoder.addCharacters(argv[i + 1], modeIt->second);
 					++i;
 				}
-				else if (argument == "-output")
+				else if (argument == L"-output")
 				{
 					filename = argv[i + 1];
 					++i;

@@ -31,6 +31,8 @@ namespace QR
 		~Encoder();
 
 		void addCharacters(std::string_view message, Mode mode);
+		//Converts a wchar_t string into a UTF-8 string and encodes it. Non ASCII characters may need a UTF-8 ECI (\000026)
+		void addCharacters(std::wstring_view message, Mode mode);
 		std::vector<std::vector<bool>> generateMatrix() const;
 	};
 }
