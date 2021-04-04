@@ -931,10 +931,10 @@ namespace QR
 			static const std::unordered_set<std::uint8_t> characters = { ' ', '$', '%', '*', '+', '-', '.', '/', ':' };
 			Mode result;
 
-			if (leadingByte >= '0' && leadingByte <= '9')
+			if (leadingByte >= 0x30 && leadingByte <= 0x39)
 				result = Mode::NUMERIC;
 			else
-				if (std::isalpha(leadingByte) || characters.count(leadingByte))
+				if (leadingByte >= 0x41 && leadingByte <= 0x5A || leadingByte >= 0x61 && leadingByte <= 0x7A || characters.count(leadingByte))
 					result = Mode::ALPHANUMERIC;
 				else
 					if (trailerByte.has_value() && IsKanji(leadingByte << 8 | trailerByte.value()))
@@ -943,6 +943,13 @@ namespace QR
 						result = Mode::BYTE;
 
 			return result;
+		}
+
+		const std::regex& GetECIRegex()
+		{
+			static const std::regex eciFormat("(\\\\)?\\\\([^\\\\]{0,6})");
+
+			return eciFormat;
 		}
 
 		void DrawFinderPattern(Symbol &symbol, Symbol::size_type startingRow, Symbol::size_type startingColumn)
@@ -1139,7 +1146,7 @@ QR::Encoder::~Encoder() = default;
 void QR::Encoder::addCharacters(std::string_view message, Mode mode)
 {
 	using std::get;
-	static const std::regex eciFormat("(\\\\)?\\\\([^\\\\]{0,6})");
+	const std::regex &eciFormat = GetECIRegex();
 	std::vector<bool> modeIndicator = GetModeIndicator(mImpl->mType, mImpl->mVersion, mode), dataBits;
 	std::vector<std::tuple<size_t, size_t, std::optional<unsigned>>> ranges; //<index, byte count, ECI>
 	unsigned dataModuleCount = GetDataModuleCount(mImpl->mType, mImpl->mVersion) - GetRemainderBitCount(mImpl->mType, mImpl->mVersion) - GetErrorCorrectionCodewordCount(mImpl->mType, mImpl->mVersion, mImpl->mLevel) * 8;
@@ -1297,12 +1304,14 @@ void QR::Encoder::addCharacters(std::string_view message, Mode mode)
 		throw std::length_error("Data bit stream would exceed the symbol's capacity");
 }
 
+void QR::Encoder::clear()
+{
+	mImpl->mBitStream.clear();
+}
+
 std::vector<std::vector<bool>> QR::Encoder::generateMatrix() const
 {
 	using std::vector; using std::tuple; using std::bitset; using std::get;
-
-	ValidateArguments(mImpl->mType, mImpl->mVersion, mImpl->mLevel);
-
 	vector<vector<bool>> result(GetSymbolSize(mImpl->mType, mImpl->mVersion), vector<bool>(GetSymbolSize(mImpl->mType, mImpl->mVersion))), mask = GetDataRegionMask(mImpl->mType, mImpl->mVersion);
 	vector<Symbol> maskedSymbols;
 	vector<unsigned> maskedSymbolScores;

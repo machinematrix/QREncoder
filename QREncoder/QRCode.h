@@ -10,7 +10,7 @@ namespace QR
 	enum class ErrorCorrectionLevel : std::uint8_t { L, M, Q, H, ERROR_DETECTION_ONLY };
 	enum class Mode : std::uint8_t { NUMERIC, ALPHANUMERIC, BYTE, KANJI };
 
-	class Encoder
+	class Encoder final
 	{
 		struct Impl;
 		std::unique_ptr<Impl> mImpl;
@@ -23,6 +23,8 @@ namespace QR
 		~Encoder();
 
 		void addCharacters(std::string_view message, Mode mode);
+		//Clear bit stream
+		void clear();
 		std::vector<std::vector<bool>> generateMatrix() const;
 	};
 }
