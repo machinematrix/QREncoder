@@ -1316,7 +1316,6 @@ std::vector<std::vector<bool>> QR::Encoder::generateMatrix() const
 	vector<Symbol> maskedSymbols;
 	vector<unsigned> maskedSymbolScores;
 	vector<bool> dataBitStream = mImpl->mBitStream;
-	BlockLayoutVector layouts = GetBlockLayout(mImpl->mType, mImpl->mVersion, mImpl->mLevel);
 	vector<vector<bitset<8>>> dataBlocks, errorCorrectionBlocks;
 	decltype(dataBitStream)::size_type bitIndex = 0;
 	int currentRow = GetSymbolSize(mImpl->mType, mImpl->mVersion) - 1, currentColumn = currentRow, delta = -1;
@@ -1367,51 +1366,55 @@ std::vector<std::vector<bool>> QR::Encoder::generateMatrix() const
 		throw std::length_error("Message exceeds symbol capacity");
 
 	//Split bit stream into data blocks and generate the corresponding error correction blocks
-	std::sort(layouts.begin(), layouts.end(), [](const decltype(layouts)::value_type &lhs, const decltype(layouts)::value_type &rhs) -> bool { return get<1>(lhs) < get<1>(rhs); });
-	for (const auto &blockLayout : layouts)
+	for (const auto &blockLayout : GetBlockLayout(mImpl->mType, mImpl->mVersion, mImpl->mLevel))
 	{
-		decltype(dataBlocks)::value_type block(get<2>(blockLayout)), errorBlock;
-		auto &generatorPolynomial = GetPolynomialCoefficientExponents(get<1>(blockLayout) - get<2>(blockLayout));
-		unsigned n = get<2>(blockLayout);
+		auto blockCounter = std::get<0>(blockLayout);
 
-		for (auto &codeword : block)
+		while (blockCounter--)
 		{
-			decltype(dataBitStream)::size_type lastBit = 0;
+			decltype(dataBlocks)::value_type block(get<2>(blockLayout)), errorBlock;
+			auto &generatorPolynomial = GetPolynomialCoefficientExponents(get<1>(blockLayout) - get<2>(blockLayout));
+			unsigned n = get<2>(blockLayout);
 
-			if (mImpl->mType == SymbolType::MICRO_QR && (mImpl->mVersion == 1 || mImpl->mVersion == 3) && &codeword == &block.back())
-				lastBit = 4;
-
-			for (decltype(dataBitStream)::size_type i = 8; i-- > lastBit;)
-				codeword[i] = dataBitStream[bitIndex++];
-		}
-
-		errorBlock = block;
-		errorBlock.resize(get<1>(blockLayout));
-
-		while (n--)
-		{
-			auto current = errorBlock.front().to_ulong();
-
-			errorBlock.erase(errorBlock.begin());
-
-			if (current)
+			for (auto &codeword : block)
 			{
-				current = GetAlphaExponent(current);
+				decltype(dataBitStream)::size_type lastBit = 0;
 
-				for (unsigned i = 0; i < generatorPolynomial.size(); ++i)
+				if (mImpl->mType == SymbolType::MICRO_QR && (mImpl->mVersion == 1 || mImpl->mVersion == 3) && &codeword == &block.back())
+					lastBit = 4;
+
+				for (decltype(dataBitStream)::size_type i = 8; i-- > lastBit;)
+					codeword[i] = dataBitStream[bitIndex++];
+			}
+
+			errorBlock = block;
+			errorBlock.resize(get<1>(blockLayout));
+
+			while (n--)
+			{
+				auto current = errorBlock.front().to_ulong();
+
+				errorBlock.erase(errorBlock.begin());
+
+				if (current)
 				{
-					auto exponentSum = current + generatorPolynomial[i];
+					current = GetAlphaExponent(current);
 
-					if (exponentSum > 255)
-						exponentSum %= 255;
+					for (unsigned i = 0; i < generatorPolynomial.size(); ++i)
+					{
+						auto exponentSum = current + generatorPolynomial[i];
 
-					errorBlock[i] = errorBlock[i].to_ulong() ^ GetAlphaValue(exponentSum);
+						if (exponentSum > 255)
+							exponentSum %= 255;
+
+						errorBlock[i] = errorBlock[i].to_ulong() ^ GetAlphaValue(exponentSum);
+					}
 				}
 			}
-		}
 
-		dataBlocks.resize(dataBlocks.size() + get<0>(blockLayout), block);
-		errorCorrectionBlocks.resize(errorCorrectionBlocks.size() + get<0>(blockLayout), errorBlock);
+			dataBlocks.push_back(block);
+			errorCorrectionBlocks.push_back(errorBlock);
+		}
 	}
 
 	//Place bits in symbol
