@@ -1152,7 +1152,7 @@ void QR::Encoder::addCharacters(std::string_view message, Mode mode)
 	unsigned dataModuleCount = GetDataModuleCount(mImpl->mType, mImpl->mVersion) - GetRemainderBitCount(mImpl->mType, mImpl->mVersion) - GetErrorCorrectionCodewordCount(mImpl->mType, mImpl->mVersion, mImpl->mLevel) * 8;
 	unsigned doubleSlashCount = 0;
 
-	for (std::regex_iterator<typename decltype(message)::const_iterator> it(message.cbegin(), message.cend(), eciFormat), end; it != end; ++it)
+	for (std::regex_iterator<decltype(message)::const_iterator> it(message.cbegin(), message.cend(), eciFormat), end; it != end; ++it)
 	{
 		auto &results = *it;
 
@@ -1208,7 +1208,7 @@ void QR::Encoder::addCharacters(std::string_view message, Mode mode)
 			{
 				std::vector<decltype(message)::value_type> digits;
 
-				for (typename decltype(message)::size_type i = get<0>(range); i < get<0>(range) + get<1>(range); ++i)
+				for (decltype(message)::size_type i = get<0>(range); i < get<0>(range) + get<1>(range); ++i)
 				{
 					digits.push_back(message[i]);
 
@@ -1233,7 +1233,7 @@ void QR::Encoder::addCharacters(std::string_view message, Mode mode)
 				if (mImpl->mType == SymbolType::MICRO_QR && mImpl->mVersion < 2)
 					throw std::invalid_argument("Alphanumeric mode is not supported in M1 symbols");
 
-				for (typename decltype(message)::size_type i = get<0>(range); i < get<0>(range) + get<1>(range); ++i)
+				for (decltype(message)::size_type i = get<0>(range); i < get<0>(range) + get<1>(range); ++i)
 				{
 					characters.push_back(message[i]);
 
@@ -1273,7 +1273,7 @@ void QR::Encoder::addCharacters(std::string_view message, Mode mode)
 				if (mImpl->mType == SymbolType::MICRO_QR && mImpl->mVersion < 3)
 					throw std::invalid_argument("Kanji mode is not supported in M1 and M2 symbols");
 
-				for (typename decltype(message)::size_type i = get<0>(range); i < get<0>(range) + get<1>(range); i += 2)
+				for (decltype(message)::size_type i = get<0>(range); i < get<0>(range) + get<1>(range); i += 2)
 				{
 					//std::uint16_t kanjiCharacter = *reinterpret_cast<const std::uint16_t*>(message.data() + i);
 					std::uint16_t kanjiCharacter = message[i] << 8 | message[i + 1] & 0xFF;
@@ -1315,9 +1315,10 @@ std::vector<std::vector<bool>> QR::Encoder::generateMatrix() const
 	vector<vector<bool>> result(GetSymbolSize(mImpl->mType, mImpl->mVersion), vector<bool>(GetSymbolSize(mImpl->mType, mImpl->mVersion))), mask = GetDataRegionMask(mImpl->mType, mImpl->mVersion);
 	vector<Symbol> maskedSymbols;
 	vector<unsigned> maskedSymbolScores;
+	vector<bool> dataBitStream = mImpl->mBitStream;
 	BlockLayoutVector layouts = GetBlockLayout(mImpl->mType, mImpl->mVersion, mImpl->mLevel);
 	vector<vector<bitset<8>>> dataBlocks, errorCorrectionBlocks;
-	typename decltype(mImpl->mBitStream)::size_type bitIndex = 0;
+	decltype(dataBitStream)::size_type bitIndex = 0;
 	int currentRow = GetSymbolSize(mImpl->mType, mImpl->mVersion) - 1, currentColumn = currentRow, delta = -1;
 	unsigned quietZoneWidth = mImpl->mType == SymbolType::MICRO_QR ? 2 : 4;
 	unsigned dataModuleCount = GetDataModuleCount(mImpl->mType, mImpl->mVersion) - GetRemainderBitCount(mImpl->mType, mImpl->mVersion) - GetErrorCorrectionCodewordCount(mImpl->mType, mImpl->mVersion, mImpl->mLevel) * 8;
@@ -1333,33 +1334,33 @@ std::vector<std::vector<bool>> QR::Encoder::generateMatrix() const
 	DrawTimingPatterns(result, mImpl->mType, mImpl->mVersion);
 
 	//Add terminator and pad codewords
-	if (mImpl->mBitStream.size() <= dataModuleCount)
+	if (dataBitStream.size() <= dataModuleCount)
 	{
 		auto terminator = GetTerminator(mImpl->mType, mImpl->mVersion);
 
-		mImpl->mBitStream.insert(mImpl->mBitStream.end(), terminator.begin(), terminator.begin() + std::min(dataModuleCount - mImpl->mBitStream.size(), terminator.size()));
+		dataBitStream.insert(dataBitStream.end(), terminator.begin(), terminator.begin() + std::min(dataModuleCount - dataBitStream.size(), terminator.size()));
 
-		if (mImpl->mBitStream.size() < dataModuleCount && mImpl->mBitStream.size() % 8)
+		if (dataBitStream.size() < dataModuleCount && dataBitStream.size() % 8)
 		{
-			mImpl->mBitStream.resize(mImpl->mBitStream.size() - mImpl->mBitStream.size() % 8 + 8);
+			dataBitStream.resize(dataBitStream.size() - dataBitStream.size() % 8 + 8);
 
 			//If I got past the limit after resizing to an 8 bit boundary, then it must be because of the 4 bit codeword in M1 or M3 symbols
-			if (mImpl->mBitStream.size() > dataModuleCount)
-				mImpl->mBitStream.resize(dataModuleCount);
+			if (dataBitStream.size() > dataModuleCount)
+				dataBitStream.resize(dataModuleCount);
 		}
 
-		if (mImpl->mBitStream.size() < dataModuleCount)
+		if (dataBitStream.size() < dataModuleCount)
 		{
 			vector<vector<bool>> padCodewords;
-			typename decltype(padCodewords)::size_type counter = 0;
+			decltype(padCodewords)::size_type counter = 0;
 
 			if (mImpl->mType == SymbolType::MICRO_QR && (mImpl->mVersion == 1 || mImpl->mVersion == 3))
 				padCodewords = { { 0, 0, 0, 0 } }; //Pad codeword for M1 and M3
 			else
 				padCodewords = { { 1, 1, 1, 0, 1, 1, 0, 0 }, { 0, 0, 0, 1, 0, 0, 0, 1 } };
 
-			while (mImpl->mBitStream.size() < dataModuleCount)
-				mImpl->mBitStream.insert(mImpl->mBitStream.end(), padCodewords[counter % padCodewords.size()].begin(), padCodewords[counter % padCodewords.size()].end()), ++counter;
+			while (dataBitStream.size() < dataModuleCount)
+				dataBitStream.insert(dataBitStream.end(), padCodewords[counter % padCodewords.size()].begin(), padCodewords[counter % padCodewords.size()].end()), ++counter;
 		}
 	}
 	else
@@ -1369,19 +1370,19 @@ std::vector<std::vector<bool>> QR::Encoder::generateMatrix() const
 	std::sort(layouts.begin(), layouts.end(), [](const decltype(layouts)::value_type &lhs, const decltype(layouts)::value_type &rhs) -> bool { return get<1>(lhs) < get<1>(rhs); });
 	for (const auto &blockLayout : layouts)
 	{
-		typename decltype(dataBlocks)::value_type block(get<2>(blockLayout)), errorBlock;
+		decltype(dataBlocks)::value_type block(get<2>(blockLayout)), errorBlock;
 		auto &generatorPolynomial = GetPolynomialCoefficientExponents(get<1>(blockLayout) - get<2>(blockLayout));
 		unsigned n = get<2>(blockLayout);
 
 		for (auto &codeword : block)
 		{
-			typename decltype(mImpl->mBitStream)::size_type startingBit = codeword.size();
+			decltype(dataBitStream)::size_type startingBit = codeword.size();
 
 			if (mImpl->mType == SymbolType::MICRO_QR && (mImpl->mVersion == 1 || mImpl->mVersion == 3) && &codeword == &block.back())
 				startingBit = 4;
 
-			for (typename decltype(mImpl->mBitStream)::size_type i = startingBit; i--;)
-				codeword[i] = mImpl->mBitStream[bitIndex++];
+			for (decltype(dataBitStream)::size_type i = startingBit; i--;)
+				codeword[i] = dataBitStream[bitIndex++];
 		}
 
 		errorBlock = block;
