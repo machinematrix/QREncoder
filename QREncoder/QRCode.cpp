@@ -1376,12 +1376,12 @@ std::vector<std::vector<bool>> QR::Encoder::generateMatrix() const
 
 		for (auto &codeword : block)
 		{
-			decltype(dataBitStream)::size_type startingBit = codeword.size();
+			decltype(dataBitStream)::size_type lastBit = 0;
 
 			if (mImpl->mType == SymbolType::MICRO_QR && (mImpl->mVersion == 1 || mImpl->mVersion == 3) && &codeword == &block.back())
-				startingBit = 4;
+				lastBit = 4;
 
-			for (decltype(dataBitStream)::size_type i = startingBit; i--;)
+			for (decltype(dataBitStream)::size_type i = 8; i-- > lastBit;)
 				codeword[i] = dataBitStream[bitIndex++];
 		}
 
@@ -1425,12 +1425,12 @@ std::vector<std::vector<bool>> QR::Encoder::generateMatrix() const
 			{
 				if (codewordIndex < block.size())
 				{
-					auto startingBit = block[codewordIndex].size();
+					auto lastBit = 0;
 
 					if (mImpl->mType == SymbolType::MICRO_QR && (mImpl->mVersion == 1 || mImpl->mVersion == 3) && &block[codewordIndex] == &block.back() && &blocks == &dataBlocks)
-						startingBit = 4;
+						lastBit = 4;
 
-					for (auto bitIndex = startingBit; bitIndex;)
+					for (auto bitIndex = 8; bitIndex > lastBit;)
 					{
 						if (!mask[currentRow][currentColumn])
 							result[currentRow][currentColumn] = block[codewordIndex][--bitIndex];
