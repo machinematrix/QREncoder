@@ -1,5 +1,5 @@
 #include "gtest/gtest.h"
-#include "QRCode.h"
+#include "QREncoder.h"
 #include <string_view>
 #include <optional>
 #include <unordered_map>

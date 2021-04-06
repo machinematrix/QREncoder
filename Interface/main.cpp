@@ -6,30 +6,7 @@
 #include <optional>
 #include <codecvt>
 #include "Image.h"
-#include "QRCode.h"
-
-BMPImage QRToBMP(const std::vector<std::vector<bool>> &code, unsigned multiplier)
-{
-	BMPImage result(static_cast<std::uint16_t>(code.size() * multiplier), static_cast<std::uint16_t>(code.size() * multiplier), 1);
-
-	for (std::vector<std::vector<bool>>::size_type i = 0; i < code.size(); ++i)
-		for (std::vector<std::vector<bool>>::size_type j = 0; j < code[i].size(); ++j)
-				for (decltype(i) y = 0; y < multiplier; ++y)
-					for (decltype(j) x = 0; x < multiplier; ++x)
-					{
-						Point point;
-
-						point.mX = static_cast<std::uint16_t>(j * multiplier + x);
-						point.mY = static_cast<std::uint16_t>(i * multiplier + y);
-
-						if (code[i][j])
-							result.setPixelColor(point, { 0, 0, 0 });
-						else
-							result.setPixelColor(point, { 255, 255, 255 });
-					}
-
-	return result;
-}
+#include "QREncoder.h"
 
 int wmain(int argc, wchar_t **argv)
 {

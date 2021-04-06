@@ -1,4 +1,4 @@
-#include "QRCode.h"
+#include "QREncoder.h"
 #include <stdexcept>
 #include <array>
 #include <unordered_map>

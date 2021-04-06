@@ -20,11 +20,6 @@ struct BMPImage::Impl //https://docs.microsoft.com/en-us/windows/win32/gdi/bitma
 	std::vector<std::vector<std::uint8_t>> mBitmap;
 };
 
-//BMPImage::BMPImage(std::string_view fileName)
-//	:mImpl(new Impl)
-//{
-//}
-
 BMPImage::BMPImage(std::uint16_t width, std::uint16_t height, std::uint8_t bitsPerPixel)
 	:mImpl(new Impl)
 {
@@ -78,7 +73,7 @@ BMPImage::BMPImage(const BMPImage &other)
 	:mImpl(new Impl(*other.mImpl))
 {}
 
-BMPImage::BMPImage(BMPImage&&) = default;
+BMPImage::BMPImage(BMPImage&&) noexcept = default;
 
 BMPImage::~BMPImage() = default;
 
@@ -225,4 +220,27 @@ std::ofstream& operator<<(std::ofstream &stream, const BMPImage &image)
 		stream.write(reinterpret_cast<const char *>(row.data()), static_cast<std::uint64_t>(row.size()) * sizeof(decltype(image.mImpl->mBitmap)::value_type::value_type));
 	
 	return stream;
+}
+
+BMPImage QRToBMP(const std::vector<std::vector<bool>> &code, unsigned multiplier)
+{
+	BMPImage result(static_cast<std::uint16_t>(code.size() * multiplier), static_cast<std::uint16_t>(code.size() * multiplier), 1);
+
+	for (std::vector<std::vector<bool>>::size_type i = 0; i < code.size(); ++i)
+		for (std::vector<std::vector<bool>>::size_type j = 0; j < code[i].size(); ++j)
+			for (decltype(i) y = 0; y < multiplier; ++y)
+				for (decltype(j) x = 0; x < multiplier; ++x)
+				{
+					Point point;
+
+					point.mX = static_cast<std::uint16_t>(j * multiplier + x);
+					point.mY = static_cast<std::uint16_t>(i * multiplier + y);
+
+					if (code[i][j])
+						result.setPixelColor(point, { 0, 0, 0 });
+					else
+						result.setPixelColor(point, { 255, 255, 255 });
+				}
+
+	return result;
 }

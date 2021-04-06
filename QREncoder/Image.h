@@ -2,7 +2,7 @@
 #define IMAGE_H
 #include <fstream>
 #include <memory>
-#include <string_view>
+#include <vector>
 
 struct Dimensions
 {
@@ -29,10 +29,9 @@ class BMPImage
 	std::unique_ptr<Impl> mImpl;
 	friend std::ofstream& operator<<(std::ofstream&, const BMPImage&);
 public:
-	//BMPImage(std::string_view fileName);
 	BMPImage(std::uint16_t width, std::uint16_t height, std::uint8_t bitsPerPixel = 32);
 	BMPImage(const BMPImage&);
-	BMPImage(BMPImage&&);
+	BMPImage(BMPImage&&) noexcept;
 	~BMPImage();
 	void setPixelColor(Point point, Color color);
 	Color getPixelColor(Point point);
@@ -40,5 +39,6 @@ public:
 };
 
 std::ofstream& operator<<(std::ofstream&, const BMPImage&);
+BMPImage QRToBMP(const std::vector<std::vector<bool>> &code, unsigned multiplier);
 
 #endif
