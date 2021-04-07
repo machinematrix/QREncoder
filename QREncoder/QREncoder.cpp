@@ -1154,9 +1154,7 @@ void QR::Encoder::addCharacters(std::string_view message, Mode mode)
 
 	for (std::regex_iterator<decltype(message)::const_iterator> it(message.cbegin(), message.cend(), eciFormat), end; it != end; ++it)
 	{
-		auto &results = *it;
-
-		if (!results[1].matched)
+		if (auto &results = *it; !results[1].matched)
 		{
 			if (results[2].length() != 6)
 				throw std::invalid_argument("Invalid ECI sequence");
