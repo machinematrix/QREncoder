@@ -1185,12 +1185,13 @@ void QR::Encoder::addCharacters(std::string_view message, Mode mode)
 
 	for (const auto &range : ranges)
 	{
-		auto characterCount = GetCharacterCountIndicator(mImpl->mType, mImpl->mVersion, mode, mode == Mode::KANJI ? get<1>(range) / 2 : get<1>(range) - doubleSlashCount);
+		auto [index, byteCount, eci] = range;
+		auto characterCount = GetCharacterCountIndicator(mImpl->mType, mImpl->mVersion, mode, mode == Mode::KANJI ? byteCount / 2 : byteCount - doubleSlashCount);
 
-		if (mode == Mode::KANJI && get<1>(range) % 2)
+		if (mode == Mode::KANJI && byteCount % 2)
 			throw std::invalid_argument("Invalid Kanji sequence");
 
-		if (auto eci = get<2>(range))
+		if (eci)
 		{
 			auto eciBits = GetECISequence(eci.value());
 
@@ -1206,11 +1207,11 @@ void QR::Encoder::addCharacters(std::string_view message, Mode mode)
 			{
 				std::vector<decltype(message)::value_type> digits;
 
-				for (decltype(message)::size_type i = get<0>(range); i < get<0>(range) + get<1>(range); ++i)
+				for (decltype(message)::size_type i = index; i < index + byteCount; ++i)
 				{
 					digits.push_back(message[i]);
 
-					if (digits.size() == 3 || i == (get<0>(range) + get<1>(range)) - 1 && !digits.empty())
+					if (digits.size() == 3 || i == (index + byteCount) - 1 && !digits.empty())
 					{
 						unsigned encodedDigits = ToInteger(digits);
 
@@ -1231,11 +1232,11 @@ void QR::Encoder::addCharacters(std::string_view message, Mode mode)
 				if (mImpl->mType == SymbolType::MICRO_QR && mImpl->mVersion < 2)
 					throw std::invalid_argument("Alphanumeric mode is not supported in M1 symbols");
 
-				for (decltype(message)::size_type i = get<0>(range); i < get<0>(range) + get<1>(range); ++i)
+				for (decltype(message)::size_type i = index; i < index + byteCount; ++i)
 				{
 					characters.push_back(message[i]);
 
-					if (characters.size() == 2 || i == (get<0>(range) + get<1>(range)) - 1 && !characters.empty())
+					if (characters.size() == 2 || i == (index + byteCount) - 1 && !characters.empty())
 					{
 						unsigned encodedCharacters = characters.size() == 2 ? GetAlphanumericCode(characters[0]) * 45 + GetAlphanumericCode(characters[1]) : GetAlphanumericCode(characters[0]);
 
@@ -1254,7 +1255,7 @@ void QR::Encoder::addCharacters(std::string_view message, Mode mode)
 				if (mImpl->mType == SymbolType::MICRO_QR && mImpl->mVersion < 3)
 					throw std::invalid_argument("Byte mode is not supported in M1 and M2 symbols");
 
-				for (size_t i = get<0>(range); i < get<0>(range) + get<1>(range); ++i)
+				for (size_t i = index; i < index + byteCount; ++i)
 				{
 					for (size_t bit = 0; bit < 8; ++bit)
 						dataBits.push_back(*(message.data() + i) & 1 << 7 >> bit);
@@ -1271,9 +1272,8 @@ void QR::Encoder::addCharacters(std::string_view message, Mode mode)
 				if (mImpl->mType == SymbolType::MICRO_QR && mImpl->mVersion < 3)
 					throw std::invalid_argument("Kanji mode is not supported in M1 and M2 symbols");
 
-				for (decltype(message)::size_type i = get<0>(range); i < get<0>(range) + get<1>(range); i += 2)
+				for (decltype(message)::size_type i = index; i < index + byteCount; i += 2)
 				{
-					//std::uint16_t kanjiCharacter = *reinterpret_cast<const std::uint16_t*>(message.data() + i);
 					std::uint16_t kanjiCharacter = message[i] << 8 | message[i + 1] & 0xFF;
 
 					if (!IsKanji(kanjiCharacter))
