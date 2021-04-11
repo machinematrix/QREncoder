@@ -216,7 +216,7 @@ TEST(Bitmap, PixelColor)
 {
 	std::array<Color, 5> colors = { { { 255, 0, 0 }, { 0, 255, 0 }, { 0, 0, 255 }, { 0, 0, 0 }, { 255, 255, 255 } } };
 
-	for (int bitCount : { /*1, 4, 8, 16,*/ 24, 32 })
+	for (int bitCount : { 1, 4, 8, 16, 24, 32 })
 	{
 		BMPImage bitmap(128, 128, bitCount);
 
