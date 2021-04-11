@@ -39,6 +39,7 @@ public:
 };
 
 std::ofstream& operator<<(std::ofstream&, const BMPImage&);
-BMPImage QRToBMP(const std::vector<std::vector<bool>> &code, unsigned multiplier);
+BMPImage QRToBMP(const std::vector<std::vector<bool>> &code, unsigned multiplier, Color lightModuleColor, Color darkModuleColor);
+bool operator==(Color, Color);
 
 #endif

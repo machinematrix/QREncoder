@@ -14,7 +14,7 @@ int wmain(int argc, wchar_t **argv)
 	using std::wcout;
 	using std::cerr;
 	using std::endl;
-	std::wregex versionFormat(L"-(M)?([[:digit:]]{1,2})-([LMQH])");
+	std::wregex versionFormat(L"-(M)?([[:digit:]]{1,2})-([LMQH])"), colorFormat(L"\\{([[:digit:]]{1,3}),([[:digit:]]{1,3}),([[:digit:]]{1,3})\\}");
 	std::wcmatch results;
 	std::unordered_map<wchar_t, QR::ErrorCorrectionLevel> levels = {
 		{ L'L', QR::ErrorCorrectionLevel::L },
@@ -61,6 +61,7 @@ int wmain(int argc, wchar_t **argv)
 		try
 		{
 			QR::Encoder encoder(type, version, level);
+			Color dark = {}, light = { 255, 255, 255 };
 			
 			for (int i = 2; i < argc - 1; ++i)
 			{
@@ -79,6 +80,23 @@ int wmain(int argc, wchar_t **argv)
 					filename = argv[i + 1];
 					++i;
 				}
+				else if (bool isLight; (isLight = argument == L"-light") || argument == L"-dark")
+				{
+					if (std::regex_match(argv[i + 1], results, colorFormat))
+					{
+						int red = std::stoi(results[1]), green = std::stoi(results[2]), blue = std::stoi(results[3]);
+
+						if (red > 255 || green > 255 || blue > 255)
+							throw std::invalid_argument("Invalid color intensity. Valid values are [0,255]");
+
+						if (isLight)
+							light.mRed = red, light.mGreen = green, light.mBlue = blue;
+						else
+							dark.mRed = red, dark.mGreen = green, dark.mBlue = blue;
+					}
+					else
+						throw std::invalid_argument("Invalid color");
+				}
 			}
 
 			auto qr = encoder.generateMatrix();
@@ -86,7 +104,7 @@ int wmain(int argc, wchar_t **argv)
 			output.open(filename, std::ios_base::binary);
 
 			if (output.is_open())
-				output << QRToBMP(qr, 4);
+				output << QRToBMP(qr, 4, light, dark);
 			else
 			{
 				cerr << "Could not open output file" << endl;

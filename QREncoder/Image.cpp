@@ -159,8 +159,8 @@ Color BMPImage::getPixelColor(Point point)
 
 			case 16:
 				result.mBlue = (mImpl->mBitmap.at(point.mY).at(column / 8) & 0b11111) * 8; //lower 5 bits of the lower byte
-				result.mGreen = (mImpl->mBitmap.at(point.mY).at(column / 8) >> 5 | mImpl->mBitmap.at(point.mY).at(column / 8) & 0b11 << 3) * 8; //higher 3 bits of the lower byte OR lower 2 bits of the higher byte
-				result.mRed = (mImpl->mBitmap.at(point.mY).at(column / 8) << 1 >> 3) * 8; //5 bits starting from the second most significant bit of the higher byte
+				result.mGreen = (mImpl->mBitmap.at(point.mY).at(column / 8) >> 5 | (mImpl->mBitmap.at(point.mY).at(column / 8 + 1) & 0b11) << 3) * 8; //higher 3 bits of the lower byte OR lower 2 bits of the higher byte
+				result.mRed = (mImpl->mBitmap.at(point.mY).at(column / 8 + 1) << 1 >> 3) * 8; //5 bits starting from the second most significant bit of the higher byte
 
 				if (result.mRed == 248)
 					result.mRed = 255;
@@ -176,8 +176,8 @@ Color BMPImage::getPixelColor(Point point)
 			case 24:
 			case 32:
 				result.mBlue = mImpl->mBitmap.at(point.mY).at(column / 8);
-				result.mGreen = mImpl->mBitmap.at(point.mY).at(column / 8);
-				result.mRed = mImpl->mBitmap.at(point.mY).at(column / 8);
+				result.mGreen = mImpl->mBitmap.at(point.mY).at(column / 8 + 1);
+				result.mRed = mImpl->mBitmap.at(point.mY).at(column / 8 + 2);
 				break;
 		}
 	}
@@ -222,7 +222,7 @@ std::ofstream& operator<<(std::ofstream &stream, const BMPImage &image)
 	return stream;
 }
 
-BMPImage QRToBMP(const std::vector<std::vector<bool>> &code, unsigned multiplier)
+BMPImage QRToBMP(const std::vector<std::vector<bool>> &code, unsigned multiplier, Color lightModuleColor, Color darkModuleColor)
 {
 	BMPImage result(static_cast<std::uint16_t>(code.size() * multiplier), static_cast<std::uint16_t>(code.size() * multiplier), 1);
 
@@ -237,10 +237,15 @@ BMPImage QRToBMP(const std::vector<std::vector<bool>> &code, unsigned multiplier
 					point.mY = static_cast<std::uint16_t>(i * multiplier + y);
 
 					if (code[i][j])
-						result.setPixelColor(point, { 0, 0, 0 });
+						result.setPixelColor(point, darkModuleColor);
 					else
-						result.setPixelColor(point, { 255, 255, 255 });
+						result.setPixelColor(point, lightModuleColor);
 				}
 
 	return result;
+}
+
+bool operator==(Color lhs, Color rhs)
+{
+	return lhs.mRed == rhs.mRed && lhs.mBlue == rhs.mBlue && lhs.mGreen == rhs.mGreen;
 }

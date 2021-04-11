@@ -33,6 +33,7 @@
   <ImportGroup Label="PropertySheets" />
   <PropertyGroup Label="UserMacros" />
   <ItemGroup>
+    <ClCompile Include="..\QREncoder\Image.cpp" />
     <ClCompile Include="..\QREncoder\QREncoder.cpp" />
     <ClCompile Include="test.cpp" />
   </ItemGroup>

@@ -1,12 +1,13 @@
 #include "gtest/gtest.h"
 #include "QREncoder.h"
+#include "Image.h"
 #include <string_view>
 #include <optional>
 #include <unordered_map>
 #include <map>
 #include <tuple>
 #include <algorithm>
-#include <execution>
+#include <array>
 
 namespace QR
 {
@@ -193,4 +194,38 @@ TEST(IsKanji, General)
 	EXPECT_FALSE(QR::IsKanji(0xEBC0));
 	EXPECT_FALSE(QR::IsKanji(0xFFFF));
 	EXPECT_TRUE(QR::IsKanji(0x88AE));
+}
+
+TEST(Bitmap, ColorTableSize)
+{
+	for (int bitCount : { 1, 4, 8 })
+	{
+		BMPImage bitmap(128, 128, bitCount);
+
+		for (int i = 0; i < 1 << bitCount; ++i) //Fill the color table
+		{
+			std::uint8_t color = static_cast<std::uint8_t>(i);
+			EXPECT_NO_THROW(bitmap.setPixelColor({ 0, 0 }, { color, color, color }));
+		}
+
+		EXPECT_THROW(bitmap.setPixelColor({ 0, 0 }, { 255, 0, 0 }), std::runtime_error); //Try to add a new color after the color table has been filled
+	}
+}
+
+TEST(Bitmap, PixelColor)
+{
+	std::array<Color, 5> colors = { { { 255, 0, 0 }, { 0, 255, 0 }, { 0, 0, 255 }, { 0, 0, 0 }, { 255, 255, 255 } } };
+
+	for (int bitCount : { /*1, 4, 8, 16,*/ 24, 32 })
+	{
+		BMPImage bitmap(128, 128, bitCount);
+
+		for (size_t i = 0, sz = std::min(size_t{ 1 } << bitCount, colors.size()); i < sz; ++i)
+		{
+			Color color;
+			bitmap.setPixelColor({ 127, 127 }, colors[i]);
+			color = bitmap.getPixelColor({ 127, 127 });
+			EXPECT_EQ(color, colors[i]);
+		}
+	}
 }
