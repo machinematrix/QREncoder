@@ -14,7 +14,7 @@ int wmain(int argc, wchar_t **argv)
 	using std::wcout;
 	using std::cerr;
 	using std::endl;
-	std::wregex versionFormat(L"-(M)?([[:digit:]]{1,2})-([LMQH])"), colorFormat(L"\\{([[:digit:]]{1,3}),([[:digit:]]{1,3}),([[:digit:]]{1,3})\\}");
+	std::wregex versionFormat(L"-(M)?([[:digit:]]{1,2})-([LMQH])"), colorFormat(LR"(\{([[:digit:]]{1,3}),([[:digit:]]{1,3}),([[:digit:]]{1,3})\})");
 	std::wcmatch results;
 	std::unordered_map<wchar_t, QR::ErrorCorrectionLevel> levels = {
 		{ L'L', QR::ErrorCorrectionLevel::L },
@@ -61,7 +61,7 @@ int wmain(int argc, wchar_t **argv)
 		try
 		{
 			QR::Encoder encoder(type, version, level);
-			Color dark = {}, light = { 255, 255, 255 };
+			QR::Color dark = {}, light = { 255, 255, 255 };
 			
 			for (int i = 2; i < argc - 1; ++i)
 			{
@@ -104,7 +104,7 @@ int wmain(int argc, wchar_t **argv)
 			output.open(filename, std::ios_base::binary);
 
 			if (output.is_open())
-				output << QRToBMP(qr, 4, light, dark);
+				output << QR::QRToBMP(qr, 4, light, dark);
 			else
 			{
 				cerr << "Could not open output file" << endl;

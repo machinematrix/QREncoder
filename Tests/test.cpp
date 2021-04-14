@@ -200,7 +200,7 @@ TEST(Bitmap, ColorTableSize)
 {
 	for (int bitCount : { 1, 4, 8 })
 	{
-		BMPImage bitmap(128, 128, bitCount);
+		QR::BMPImage bitmap(128, 128, bitCount);
 
 		for (int i = 0; i < 1 << bitCount; ++i) //Fill the color table
 		{
@@ -214,15 +214,15 @@ TEST(Bitmap, ColorTableSize)
 
 TEST(Bitmap, PixelColor)
 {
-	std::array<Color, 5> colors = { { { 255, 0, 0 }, { 0, 255, 0 }, { 0, 0, 255 }, { 0, 0, 0 }, { 255, 255, 255 } } };
+	std::array<QR::Color, 5> colors = { { { 255, 0, 0 }, { 0, 255, 0 }, { 0, 0, 255 }, { 0, 0, 0 }, { 255, 255, 255 } } };
 
 	for (int bitCount : { 1, 4, 8, 16, 24, 32 })
 	{
-		BMPImage bitmap(128, 128, bitCount);
+		QR::BMPImage bitmap(128, 128, bitCount);
 
 		for (size_t i = 0, sz = std::min(size_t{ 1 } << bitCount, colors.size()); i < sz; ++i)
 		{
-			Color color;
+			QR::Color color;
 			bitmap.setPixelColor({ 127, 127 }, colors[i]);
 			color = bitmap.getPixelColor({ 127, 127 });
 			EXPECT_EQ(color, colors[i]);
