@@ -14,6 +14,7 @@ int wmain(int argc, wchar_t **argv)
 	using std::wcout;
 	using std::cerr;
 	using std::endl;
+	using namespace std::string_view_literals;
 	std::wregex versionFormat(L"-(M)?([[:digit:]]{1,2})-([LMQH])"), colorFormat(LR"(\{([[:digit:]]{1,3}),([[:digit:]]{1,3}),([[:digit:]]{1,3})\})");
 	std::wcmatch results;
 	std::unordered_map<wchar_t, QR::ErrorCorrectionLevel> levels = {
@@ -66,21 +67,20 @@ int wmain(int argc, wchar_t **argv)
 			for (int i = 2; i < argc - 1; ++i)
 			{
 				decltype(modes)::iterator modeIt;
-				std::wstring_view argument(argv[i]);
 
-				if ((modeIt = modes.find(argument)) != modes.end())
+				if ((modeIt = modes.find(argv[i])) != modes.end())
 				{
 					std::string utf8Message = std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>, wchar_t>{}.to_bytes(argv[i + 1]);
 
 					encoder.addCharacters(utf8Message, modeIt->second);
 					++i;
 				}
-				else if (argument == L"-output")
+				else if (argv[i] == L"-output"sv)
 				{
 					filename = argv[i + 1];
 					++i;
 				}
-				else if (bool isLight; (isLight = argument == L"-light") || argument == L"-dark")
+				else if (bool isLight; (isLight = argv[i] == L"-light"sv) || argv[i] == L"-dark"sv)
 				{
 					if (std::regex_match(argv[i + 1], results, colorFormat))
 					{
