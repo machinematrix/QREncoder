@@ -35,7 +35,8 @@
   <ItemGroup>
     <ClCompile Include="..\QREncoder\Image.cpp" />
     <ClCompile Include="..\QREncoder\QREncoder.cpp" />
-    <ClCompile Include="test.cpp" />
+    <ClCompile Include="ImageTest.cpp" />
+    <ClCompile Include="QREncoderTest.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
