@@ -4,9 +4,9 @@
 
 namespace QR
 {
-	template <typename CharacterType> std::uint8_t GetAlphanumericCode(CharacterType);
+	std::uint8_t GetAlphanumericCode(std::string::value_type);
 	Mode GetMinimalMode(std::uint8_t, std::optional<std::uint8_t> = std::optional<std::uint8_t>());
-	template <typename CharacterType> std::uint16_t ToInteger(const std::vector<CharacterType>&);
+	std::uint16_t ToInteger(const std::vector<std::string::value_type>&);
 	bool IsKanji(std::uint16_t);
 	unsigned GetSymbolRating(const std::vector<std::vector<bool>> &symbol, SymbolType type);
 	std::vector<bool> GetECISequence(unsigned assignmentNumber);
@@ -129,13 +129,9 @@ TEST(GetSymbolRating, General)
 TEST(GetAlphanumericCode, ValidCharacters)
 {
 	std::string_view alphaNumericTable("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:");
-	std::wstring_view alphaNumericTableWide(L"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:");
 
 	for (decltype(alphaNumericTable)::size_type i = 0; i < alphaNumericTable.size(); ++i)
 		EXPECT_EQ(i, QR::GetAlphanumericCode(alphaNumericTable[i]));
-
-	for (decltype(alphaNumericTableWide)::size_type i = 0; i < alphaNumericTableWide.size(); ++i)
-		EXPECT_EQ(i, QR::GetAlphanumericCode(alphaNumericTableWide[i]));
 }
 
 TEST(GetAlphanumericCode, InvalidCharacters)
@@ -167,16 +163,13 @@ TEST(GetMinimalMode, General)
 
 TEST(ToInteger, Triplets)
 {
-	EXPECT_EQ(QR::ToInteger<char>({ '0', '1', '2' }), 12);
-	EXPECT_EQ(QR::ToInteger<wchar_t>({ '0', '1', '2' }), 12);
+	EXPECT_EQ(QR::ToInteger({ '0', '1', '2' }), 12);
 }
 
 TEST(ToInteger, Remainder)
 {
-	EXPECT_EQ(QR::ToInteger<char>({ '6', '7' }), 67);
-	EXPECT_EQ(QR::ToInteger<wchar_t>({ '6', '7' }), 67);
-	EXPECT_EQ(QR::ToInteger<char>({ '8' }), 8);
-	EXPECT_EQ(QR::ToInteger<wchar_t>({ '8' }), 8);
+	EXPECT_EQ(QR::ToInteger({ '6', '7' }), 67);
+	EXPECT_EQ(QR::ToInteger({ '8' }), 8);
 }
 
 TEST(IsKanji, General)

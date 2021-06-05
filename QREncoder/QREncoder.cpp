@@ -4,6 +4,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <string>
+#include <sstream>
 #include <tuple>
 #include <bitset>
 #include <algorithm>
@@ -666,54 +667,6 @@ namespace QR
 			return result;
 		}
 
-		template<typename CharacterType>
-		std::uint8_t GetAlphanumericCode(CharacterType character)
-		{
-			std::uint8_t result = 0;
-
-			if (character >= 0x30 && character <= 0x39)
-				result = character - 0x30;
-			else if (character >= 0x41 && character <= 0x5A)
-				result = character - 0x41 + 10;
-			else if (character >= 0x61 && character <= 0x7A)
-				result = character - 0x61 + 10;
-			else
-				switch (character)
-				{
-					case 0x20: // space
-						result = 36;
-						break;
-					case 0x24: // $
-						result = 37;
-						break;
-					case 0x25: // %
-						result = 38;
-						break;
-					case 0x2A: // *
-						result = 39;
-						break;
-					case 0x2B: // +
-						result = 40;
-						break;
-					case 0x2D: // -
-						result = 41;
-						break;
-					case 0x2E: // .
-						result = 42;
-						break;
-					case 0x2F: // /
-						result = 43;
-						break;
-					case 0x3A: // :
-						result = 44;
-						break;
-					default:
-						throw std::invalid_argument("Character can't be encoded in alphanumeric mode");
-				}
-
-			return result;
-		}
-
 		//From table 10, page 50.
 		bool GetMaskBit(SymbolType type, std::uint8_t maskId, Symbol::size_type i, Symbol::size_type j)
 		{
@@ -899,18 +852,76 @@ namespace QR
 			}
 		}
 
-		template <typename CharacterType>
-		std::uint16_t ToInteger(const std::vector<CharacterType> &characters)
+		std::uint16_t ToInteger(const std::vector<std::string::value_type> &characters)
 		{
 			std::uint16_t result = 0, multiplier = 1;
 
-			for (typename std::vector<CharacterType>::const_reverse_iterator it = characters.crbegin(); it != characters.crend(); ++it, multiplier *= 10)
+			for (std::vector<std::string::value_type>::const_reverse_iterator it = characters.crbegin(); it != characters.crend(); ++it, multiplier *= 10)
 			{
 				if (*it < 0x30 || *it > 0x39)
-					throw std::invalid_argument("Character can't be encoded in numeric mode");
+				{
+					using namespace std::string_literals;
+					std::ostringstream stream;
+
+					stream << std::hex << std::uppercase << (static_cast<int>(*it) & 0xFF);
+					throw std::invalid_argument("Character 0x" + stream.str() + " can't be encoded in numeric mode");
+				}
 
 				result += (*it - 0x30) * multiplier;
 			}
+
+			return result;
+		}
+
+		std::uint8_t GetAlphanumericCode(std::string_view::value_type character)
+		{
+			std::uint8_t result = 0;
+
+			if (character >= 0x30 && character <= 0x39)
+				result = character - 0x30;
+			else if (character >= 0x41 && character <= 0x5A)
+				result = character - 0x41 + 10;
+			else if (character >= 0x61 && character <= 0x7A)
+				result = character - 0x61 + 10;
+			else
+				switch (character)
+				{
+					case 0x20: // space
+						result = 36;
+						break;
+					case 0x24: // $
+						result = 37;
+						break;
+					case 0x25: // %
+						result = 38;
+						break;
+					case 0x2A: // *
+						result = 39;
+						break;
+					case 0x2B: // +
+						result = 40;
+						break;
+					case 0x2D: // -
+						result = 41;
+						break;
+					case 0x2E: // .
+						result = 42;
+						break;
+					case 0x2F: // /
+						result = 43;
+						break;
+					case 0x3A: // :
+						result = 44;
+						break;
+					default:
+					{
+						using namespace std::string_literals;
+						std::ostringstream stream;
+
+						stream << std::hex << std::uppercase << (static_cast<int>(character) & 0xFF);
+						throw std::invalid_argument("Character 0x" + stream.str() + " can't be encoded in alphanumeric mode");
+					}
+				}
 
 			return result;
 		}
@@ -1099,13 +1110,6 @@ namespace QR
 			}
 		}
 
-		#ifdef TESTS
-		template std::uint16_t QR::ToInteger<std::string_view::value_type>(const std::vector<char> &);
-		template std::uint16_t QR::ToInteger<std::wstring_view::value_type>(const std::vector<wchar_t> &);
-		template std::uint8_t QR::GetAlphanumericCode<std::string_view::value_type>(std::string_view::value_type);
-		template std::uint8_t QR::GetAlphanumericCode<std::wstring_view::value_type>(std::wstring_view::value_type);
-		#endif
-
 		#ifndef TESTS
 	}
 	#endif
@@ -1277,7 +1281,13 @@ void QR::Encoder::addCharacters(std::string_view message, Mode mode)
 					std::uint16_t kanjiCharacter = message[i] << 8 | message[i + 1] & 0xFF;
 
 					if (!IsKanji(kanjiCharacter))
-						throw std::invalid_argument("Character can't be encoded in Kanji mode");
+					{
+						using namespace std::string_literals;
+						std::ostringstream stream;
+
+						stream << std::hex << std::uppercase << (static_cast<int>(kanjiCharacter) & 0xFFFF);
+						throw std::invalid_argument("Character 0x" + stream.str() + " can't be encoded in Kanji mode");
+					}
 
 					if (kanjiCharacter >= 0x8140 && kanjiCharacter <= 0x9FFC)
 						kanjiCharacter -= 0x8140;
