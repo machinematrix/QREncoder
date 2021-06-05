@@ -885,11 +885,11 @@ namespace QR
 				result = character - 0x61 + 10;
 			else
 			{
-				static const std::array<decltype(character), 9> specialCharacters = { 0x20/*space*/, 0x24/*$*/, 0x25/*%*/, 0x2A/***/, 0x2B/*+*/, 0x2D/*-*/, 0x2E/*.*/, 0x2F/*/*/, 0x3A/*:*/ };
-				auto it = std::find(specialCharacters.cbegin(), specialCharacters.cend(), character);
+				std::string_view specialCharacters = " $%*+-./:";
+				auto index = specialCharacters.find(character);
 
-				if (it != specialCharacters.cend())
-					result = 36 + (it - specialCharacters.cbegin());
+				if (index != std::string_view::npos)
+					result = 36 + index;
 				else
 				{
 					using namespace std::string_literals;
