@@ -42,7 +42,7 @@ namespace QR
 			return result;
 		}
 
-		//Divide by 8 to get data capacity in codewords, do % 8 to get remainder bits. Exceptions are M1 and M3, where the last codeword is 4 bits long
+		//Divide by 8 to get data capacity in codewords, do % 8 to get remainder bits. Exceptions are M1 and M3, where the last data codeword is 4 bits long
 		unsigned GetDataModuleCount(SymbolType type, std::uint8_t version)
 		{
 			static const std::array<unsigned, 4> microModuleCount = { 36, 80, 132, 192 };
@@ -884,44 +884,21 @@ namespace QR
 			else if (character >= 0x61 && character <= 0x7A)
 				result = character - 0x61 + 10;
 			else
-				switch (character)
-				{
-					case 0x20: // space
-						result = 36;
-						break;
-					case 0x24: // $
-						result = 37;
-						break;
-					case 0x25: // %
-						result = 38;
-						break;
-					case 0x2A: // *
-						result = 39;
-						break;
-					case 0x2B: // +
-						result = 40;
-						break;
-					case 0x2D: // -
-						result = 41;
-						break;
-					case 0x2E: // .
-						result = 42;
-						break;
-					case 0x2F: // /
-						result = 43;
-						break;
-					case 0x3A: // :
-						result = 44;
-						break;
-					default:
-					{
-						using namespace std::string_literals;
-						std::ostringstream stream;
+			{
+				static const std::array<decltype(character), 9> specialCharacters = { 0x20/*space*/, 0x24/*$*/, 0x25/*%*/, 0x2A/***/, 0x2B/*+*/, 0x2D/*-*/, 0x2E/*.*/, 0x2F/*/*/, 0x3A/*:*/ };
+				auto it = std::find(specialCharacters.cbegin(), specialCharacters.cend(), character);
 
-						stream << std::hex << std::uppercase << (static_cast<int>(character) & 0xFF);
-						throw std::invalid_argument("Character 0x" + stream.str() + " can't be encoded in alphanumeric mode");
-					}
+				if (it != specialCharacters.cend())
+					result = 36 + (it - specialCharacters.cbegin());
+				else
+				{
+					using namespace std::string_literals;
+					std::ostringstream stream;
+
+					stream << std::hex << std::uppercase << (static_cast<int>(character) & 0xFF);
+					throw std::invalid_argument("Character 0x" + stream.str() + " can't be encoded in alphanumeric mode");
 				}
+			}
 
 			return result;
 		}
@@ -1117,7 +1094,6 @@ namespace QR
 
 struct QR::Encoder::Impl
 {
-public:
 	std::vector<bool> mBitStream;
 	unsigned mVersion;
 	SymbolType mType;
