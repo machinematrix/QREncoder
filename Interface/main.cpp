@@ -32,11 +32,13 @@ int wmain(int argc, wchar_t **argv)
 
 	if (argc == 1)
 	{
-		cout << "Usage: " << argv[0] << " -[M]V-E -numeric|alpha|byte message -output filename\n"
+		wcout << "Usage: " << argv[0] << " -[M]V-E -numeric|alpha|byte message -light|dark {R,G,B} -output filename\n"
 			<< "M: Indicates that the output will be a Micro QR symbol\n"
 			<< "V: Indicates version number. Max is 40 for QR symbols and 4 for Micro QR symbols\n"
-			<< "E: Error correction levels. Valid values are L, M, Q, H"
-			<< "Symbol version must be the first argument, the rest of the arguments may appear in any order" << endl;
+			<< "E: Error correction level. Valid values are L, M, Q, H\n"
+			<< "light|dark: optional, set the color for light and/or dark modules\n"
+			<< "Symbol version must be the first argument, the rest of the arguments may appear in any order\n"
+			<< "Example: " << argv[0] << " -6-H -alpha \"Hello World\" -light {255,0,0} -output hello_world.bmp" << endl;
 	}
 	else if (std::regex_match(argv[1], results, versionFormat) || argv[1] == std::wstring_view(L"-M1"))
 	{

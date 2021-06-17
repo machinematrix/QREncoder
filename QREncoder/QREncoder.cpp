@@ -1160,9 +1160,8 @@ void QR::Encoder::addCharacters(std::string_view message, Mode mode)
 		if (mImpl->mType == QR::SymbolType::MICRO_QR)
 			throw std::invalid_argument("ECI is not supported in Micro QR symbols");
 
-	for (const auto &range : ranges)
+	for (auto [index, byteCount, eci] : ranges)
 	{
-		auto [index, byteCount, eci] = range;
 		auto characterCount = GetCharacterCountIndicator(mImpl->mType, mImpl->mVersion, mode, mode == Mode::KANJI ? byteCount / 2 : byteCount - doubleSlashCount);
 
 		if (mode == Mode::KANJI && byteCount % 2)
