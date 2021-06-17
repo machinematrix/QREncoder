@@ -13,7 +13,6 @@
 
 namespace QR
 {
-	using Symbol = std::vector<std::vector<bool>>;
 	using BlockLayoutVector = std::vector<std::tuple<unsigned, unsigned, unsigned>>;
 
 	#ifndef TESTS
@@ -860,7 +859,6 @@ namespace QR
 			{
 				if (*it < 0x30 || *it > 0x39)
 				{
-					using namespace std::string_literals;
 					std::ostringstream stream;
 
 					stream << std::hex << std::uppercase << (static_cast<int>(*it) & 0xFF);
@@ -877,11 +875,11 @@ namespace QR
 		{
 			std::uint8_t result = 0;
 
-			if (character >= 0x30 && character <= 0x39)
+			if (character >= 0x30 && character <= 0x39) //numbers
 				result = character - 0x30;
-			else if (character >= 0x41 && character <= 0x5A)
+			else if (character >= 0x41 && character <= 0x5A) //uppercase letters
 				result = character - 0x41 + 10;
-			else if (character >= 0x61 && character <= 0x7A)
+			else if (character >= 0x61 && character <= 0x7A) //lowercase letters
 				result = character - 0x61 + 10;
 			else
 			{
@@ -892,7 +890,6 @@ namespace QR
 					result = 36 + index;
 				else
 				{
-					using namespace std::string_literals;
 					std::ostringstream stream;
 
 					stream << std::hex << std::uppercase << (static_cast<int>(character) & 0xFF);
@@ -1258,7 +1255,6 @@ void QR::Encoder::addCharacters(std::string_view message, Mode mode)
 
 					if (!IsKanji(kanjiCharacter))
 					{
-						using namespace std::string_literals;
 						std::ostringstream stream;
 
 						stream << std::hex << std::uppercase << (static_cast<int>(kanjiCharacter) & 0xFFFF);
@@ -1293,7 +1289,7 @@ void QR::Encoder::clear()
 	mImpl->mBitStream.clear();
 }
 
-std::vector<std::vector<bool>> QR::Encoder::generateMatrix() const
+QR::Symbol QR::Encoder::generateMatrix() const
 {
 	using std::vector; using std::tuple; using std::bitset; using std::get;
 	vector<vector<bool>> result(GetSymbolSize(mImpl->mType, mImpl->mVersion), vector<bool>(GetSymbolSize(mImpl->mType, mImpl->mVersion))), mask = GetDataRegionMask(mImpl->mType, mImpl->mVersion);
@@ -1484,4 +1480,19 @@ std::vector<std::vector<bool>> QR::Encoder::generateMatrix() const
 	}
 
 	return result;
+}
+
+unsigned QR::Encoder::getVersion() const
+{
+	return mImpl->mVersion;
+}
+
+QR::SymbolType QR::Encoder::getSymbolType() const
+{
+	return mImpl->mType;
+}
+
+QR::ErrorCorrectionLevel QR::Encoder::getErrorCorrectionLevel() const
+{
+	return mImpl->mLevel;
 }
