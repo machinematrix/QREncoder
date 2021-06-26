@@ -932,7 +932,7 @@ namespace QR
 
 		const std::regex& GetECIRegex()
 		{
-			static const std::regex eciFormat("(\\\\)?\\\\([^\\\\]{0,6})");
+			static const std::regex eciFormat(R"((\\)?\\([^\\]{0,6}))");
 
 			return eciFormat;
 		}
