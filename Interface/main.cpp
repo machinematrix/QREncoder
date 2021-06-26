@@ -1,10 +1,9 @@
-#define _SILENCE_CXX17_CODECVT_HEADER_DEPRECATION_WARNING
 #include <fstream>
 #include <iostream>
 #include <unordered_map>
 #include <regex>
 #include <optional>
-#include <codecvt>
+#include <Windows.h>
 #include "Image.h"
 #include "QREncoder.h"
 
@@ -72,8 +71,11 @@ int wmain(int argc, wchar_t **argv)
 
 				if ((modeIt = modes.find(argv[i])) != modes.end())
 				{
-					std::string utf8Message = std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>, wchar_t>{}.to_bytes(argv[i + 1]);
-
+					std::wstring_view wideString = argv[i + 1];
+					std::string utf8Message;
+					
+					utf8Message.resize(WideCharToMultiByte(CP_UTF8, 0, wideString.data(), wideString.size(), nullptr, 0, nullptr, nullptr));
+					WideCharToMultiByte(CP_UTF8, 0, wideString.data(), wideString.size(), utf8Message.data(), utf8Message.size(), nullptr, nullptr);
 					encoder.addCharacters(utf8Message, modeIt->second);
 					++i;
 				}
