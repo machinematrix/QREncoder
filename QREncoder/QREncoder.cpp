@@ -1481,6 +1481,11 @@ QR::Symbol QR::Encoder::generateMatrix() const
 	return result;
 }
 
+std::vector<bool> QR::Encoder::getBitStream() const
+{
+	return mImpl->mBitStream;
+}
+
 unsigned QR::Encoder::getVersion() const
 {
 	return mImpl->mVersion;

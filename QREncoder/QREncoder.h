@@ -27,6 +27,7 @@ namespace QR
 		//Clear bit stream
 		void clear();
 		Symbol generateMatrix() const;
+		std::vector<bool> getBitStream() const;
 		unsigned getVersion() const;
 		SymbolType getSymbolType() const;
 		ErrorCorrectionLevel getErrorCorrectionLevel() const;
