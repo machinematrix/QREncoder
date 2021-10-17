@@ -1,15 +1,31 @@
 #include "gtest/gtest.h"
 #include "QREncoder.h"
 #include <optional>
+#include <concepts>
+#include <charconv>
+#include <string_view>
 
 namespace QR
 {
 	std::uint8_t GetAlphanumericCode(std::string::value_type);
 	Mode GetMinimalMode(std::uint8_t, std::optional<std::uint8_t> = std::optional<std::uint8_t>());
-	std::uint16_t ToInteger(const std::vector<std::string::value_type>&);
+	std::uint16_t ToInteger(const std::vector<std::string::value_type> &);
 	bool IsKanji(std::uint16_t);
 	unsigned GetSymbolRating(const std::vector<std::vector<bool>> &symbol, SymbolType type);
 	std::vector<bool> GetECISequence(unsigned assignmentNumber);
+}
+
+namespace
+{
+	std::string ToString(const std::vector<bool> &input)
+	{
+		std::string result;
+
+		for (bool element : input)
+			result += std::to_string(element);
+
+		return result;
+	}
 }
 
 TEST(Encoder_addCharacters, ECI)
@@ -180,4 +196,47 @@ TEST(IsKanji, General)
 	EXPECT_FALSE(QR::IsKanji(0xEBC0));
 	EXPECT_FALSE(QR::IsKanji(0xFFFF));
 	EXPECT_TRUE(QR::IsKanji(0x88AE));
+}
+
+TEST(BitStream, ECI) //Example in ISO/IEC 18004:2015, section 7.4.2.2
+{
+	QR::Encoder encoder { QR::SymbolType::QR, 1, QR::ErrorCorrectionLevel::H };
+
+	encoder.addCharacters("\\000009\xA1\xA2\xA3\xA4\xA5", QR::Mode::BYTE);
+	EXPECT_EQ(ToString(encoder.getBitStream()), "0111" "00001001" "0100" "00000101" "10100001" "10100010" "10100011" "10100100" "10100101");
+}
+
+TEST(BitStream, Numeric) //Example in ISO/IEC 18004:2015, section 7.4.3
+{
+	using namespace std::string_view_literals;
+	QR::Encoder encoder { QR::SymbolType::QR, 1, QR::ErrorCorrectionLevel::H }, microEncoder { QR::SymbolType::MICRO_QR, 3, QR::ErrorCorrectionLevel::M };
+
+	encoder.addCharacters("01234567", QR::Mode::NUMERIC);
+	microEncoder.addCharacters("0123456789012345", QR::Mode::NUMERIC);
+	EXPECT_EQ(ToString(encoder.getBitStream()), "0001" "0000001000" "0000001100" "0101011001" "1000011");
+	EXPECT_EQ(ToString(microEncoder.getBitStream()), "00" "10000" "0000001100" "0101011001" "1010100110" "1110000101" "0011101010" "0101");
+}
+
+TEST(BitStream, Alphanumeric) //Example in ISO/IEC 18004:2015, section 7.4.4
+{
+	QR::Encoder encoder { QR::SymbolType::QR, 1, QR::ErrorCorrectionLevel::H };
+
+	encoder.addCharacters("AC-42", QR::Mode::ALPHANUMERIC);
+	EXPECT_EQ(ToString(encoder.getBitStream()), "0010" "000000101" "00111001110" "11100111001" "000010");
+}
+
+TEST(BitStream, Byte)
+{
+	QR::Encoder encoder { QR::SymbolType::QR, 1, QR::ErrorCorrectionLevel::H };
+
+	encoder.addCharacters("\xAB\xA7\xA9\xAD\xAE", QR::Mode::BYTE);
+	EXPECT_EQ(ToString(encoder.getBitStream()), "0100" "00000101" "10101011" "10100111" "10101001" "10101101" "10101110");
+}
+
+TEST(BitStream, Kanji)
+{
+	QR::Encoder encoder { QR::SymbolType::QR, 1, QR::ErrorCorrectionLevel::H };
+
+	encoder.addCharacters("\x93\x5F\xE4\xAA\x93\x5F\xE4\xAA", QR::Mode::KANJI);
+	EXPECT_EQ(ToString(encoder.getBitStream()), "1000" "00000100" "0110110011111" "1101010101010" "0110110011111" "1101010101010");
 }
